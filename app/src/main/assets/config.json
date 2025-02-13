@@ -1,0 +1,56 @@
+{
+  "params": [
+    {
+      "video-vpr": [
+        "{\"che.video.vpr.enable\":false}",
+        "{\"rtc.video.avsync\":false}",
+        "{\"rtc.video.enable_pvc\":false}",
+        "{\"rtc.video.enable_sr\":{\"enabled\":false,\"mode\":2}}"
+      ],
+      "music_stereo": [
+        "{\"che.audio.aec.enable\":false}",
+        "{\"che.audio.ans.enable\":false}",
+        "{\"che.audio.agc.enable\":false}",
+        "{\"che.audio.custom_payload_type\":78}",
+        "{\"che.audio.custom_bitrate\":128000}"
+      ]
+    }
+  ],
+  "audioProfile": [
+    {
+      "default": 0
+    },
+    {
+      "speech_standard": 1
+    },
+    {
+      "music_standard": 2
+    },
+    {
+      "music_standard_stereo": 3
+    },
+    {
+      "music_high_quality": 4
+    },
+    {
+      "music_high_quality_stereo": 5
+    }
+  ],
+  "audioScenario": [
+    {
+      "default": 0
+    },
+    {
+      "game_streaming": 3
+    },
+    {
+      "chatroom": 5
+    },
+    {
+      "chorus": 7
+    },
+    {
+      "meeting": 8
+    }
+  ]
+}
