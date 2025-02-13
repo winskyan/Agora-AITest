@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
@@ -109,6 +110,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.appId = BuildConfig.APP_ID
         configuration.userId = KeyCenter.getUid()
         configuration.rtcToken = KeyCenter.getRtcToken(mChannelName, KeyCenter.getUid())
+        configuration.rtmToken =
+            if (DemoContext.isEnableRtm()) KeyCenter.getRtmToken2(KeyCenter.getUid()) else ""
         configuration.enableMultiTurnShortTermMemory = true
         configuration.userName = "test"
         configuration.agentVoiceName = "xiaoyan"
@@ -119,6 +122,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.speechRecognitionCompletenessLevel =
             MaaSConstants.SpeechRecognitionCompletenessLevel.NORMAL
         configuration.params = DemoContext.getParams().toList()
+        configuration.enableRtm = DemoContext.isEnableRtm()
 
         if (DemoContext.getAudioProfile() != -1) {
             configuration.audioProfile = DemoContext.getAudioProfile()
@@ -128,8 +132,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         val ret = mMaaSEngine?.initialize(configuration)
-        if (ret == 0) {
-            Log.d(TAG, "initialize success")
+        if (ret != 0) {
+            Log.d(TAG, "initialize failed")
         }
 
         if (DemoContext.isEnableAudio()) {
@@ -161,29 +165,31 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnJoin.setOnClickListener {
-            var channelName = binding.etChannelName.text.toString()
-            if (channelName.isEmpty()) {
-                channelName = mChannelName
+            if (mJoinSuccess) {
+                if (DemoContext.isEnableAudio()) {
+                    mMaaSEngine?.disableAudio()
+                    DemoContext.setEnableAudio(false)
+                }
+                if (DemoContext.isEnableVideo()) {
+                    mMaaSEngine?.stopVideo()
+                    DemoContext.setEnableVideo(false)
+                }
+                mMaaSEngine?.leaveChannel()
+                MaaSEngine.destroy()
+            } else {
+                var channelName = binding.etChannelName.text.toString()
+                if (channelName.isEmpty()) {
+                    channelName = mChannelName
+                }
+                initEngine()
+                mMaaSEngine?.joinChannel(
+                    channelName,
+                    MaaSConstants.CLIENT_ROLE_BROADCASTER,
+                    registerRecordingAudio = DemoContext.isEnableStereoTest(),
+                    registerPlaybackAudio = DemoContext.isEnableSaveAudio()
+                )
             }
-            initEngine()
-            mMaaSEngine?.joinChannel(
-                channelName,
-                MaaSConstants.CLIENT_ROLE_BROADCASTER,
-                registerRecordingAudio = false,
-                registerPlaybackAudio = false
-            )
-        }
 
-        binding.btnLeave.setOnClickListener {
-            if (DemoContext.isEnableAudio()) {
-                mMaaSEngine?.disableAudio()
-                DemoContext.setEnableAudio(false)
-            }
-            if (DemoContext.isEnableVideo()) {
-                mMaaSEngine?.stopVideo()
-                DemoContext.setEnableVideo(false)
-            }
-            mMaaSEngine?.leaveChannel()
         }
 
         binding.btnEnableAudio.setOnClickListener {
@@ -273,15 +279,23 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnSendAudioMetadata.setOnClickListener {
             val metadata =
-                ("metadata:" + System.currentTimeMillis()).toByteArray(Charsets.UTF_8)
-            mMaaSEngine?.sendAudioMetadata(metadata)
+                "metadata:" + System.currentTimeMillis()
+            mMaaSEngine?.sendAudioMetadata(metadata.toByteArray(Charsets.UTF_8))
             mSendAudioMetadataTime = System.currentTimeMillis()
-            updateHistoryUI("SendAudioMetadata:${String(metadata)}")
+            updateHistoryUI("SendAudioMetadata:$metadata")
         }
 
         binding.btnSendRtmMessage.setOnClickListener {
             val rtmMessage = "rtmMessage:" + System.currentTimeMillis()
-            mMaaSEngine?.sendRtmMessage(rtmMessage)
+            val ret = mMaaSEngine?.sendRtmMessage(
+                rtmMessage.toByteArray(Charsets.UTF_8),
+                MaaSConstants.RtmChannelType.MESSAGE
+            )
+            if (ret != 0) {
+                Log.d(TAG, "sendRtmMessage failed")
+                Toast.makeText(this, "sendRtmMessage failed", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             mSendRtcMessageTime = System.currentTimeMillis()
             updateHistoryUI("SendRtcMessage:$rtmMessage")
         }
@@ -315,8 +329,6 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     private fun updateUI() {
-        binding.btnJoin.isEnabled = !mJoinSuccess
-        binding.btnLeave.isEnabled = mJoinSuccess
         binding.btnEnableAudio.isEnabled = mJoinSuccess
         binding.btnEnableVideo.isEnabled = mJoinSuccess
         binding.btnSwitchCamera.isEnabled = mJoinSuccess
@@ -327,6 +339,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnClear.isEnabled = mJoinSuccess
         binding.btnSendRtmMessage.isEnabled = mJoinSuccess
 
+        binding.btnJoin.text =
+            if (mJoinSuccess) getText(R.string.leave) else getText(R.string.join)
 
         binding.btnEnableVideo.text =
             if (DemoContext.isEnableVideo()) getText(R.string.disable_video) else getText(R.string.enable_video)
@@ -337,8 +351,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             )
     }
 
+
     override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
-        Log.d(TAG, "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed")
         mJoinSuccess = true
         runOnUiThread { updateUI() }
     }
@@ -346,7 +360,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     override fun onLeaveChannelSuccess() {
         Log.d(TAG, "onLeaveChannelSuccess")
         mJoinSuccess = false
-        runOnUiThread { updateUI() }
+        runOnUiThread {
+            updateUI()
+
+        }
     }
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
@@ -388,6 +405,26 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             updateHistoryUI("ReceiveAudioMetadata:${String(metadata)} diff:$diff")
         } else {
             updateHistoryUI("ReceiveAudioMetadata:${String(metadata)}")
+        }
+    }
+
+    override fun onRtmMessageReceived(
+        channelName: String,
+        topicName: String,
+        message: String,
+        publisherId: String,
+        customType: String,
+        timestamp: Long
+    ) {
+        Log.d(
+            TAG,
+            "onRtmMessageReceived channelName:$channelName topicName:$topicName message:$message publisherId:$publisherId customType:$customType timestamp:$timestamp"
+        )
+        if (0L != mSendRtcMessageTime) {
+            val diff = System.currentTimeMillis() - mSendRtcMessageTime
+            updateHistoryUI("ReceiveRtmMessage:$message diff:$diff")
+        } else {
+            updateHistoryUI("ReceiveRtmMessage:$message")
         }
     }
 

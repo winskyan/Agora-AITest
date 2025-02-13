@@ -19,6 +19,33 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
+            <CheckBox
+                android:id="@+id/enable_rtm_cb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_rtm"
+                android:textSize="15sp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <CheckBox
+                android:id="@+id/enable_stereo_test_cb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_stereo_test"
+                android:textSize="15sp"
+                app:layout_constraintStart_toEndOf="@id/enable_rtm_cb"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <CheckBox
+                android:id="@+id/enable_save_audio_cb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_save_audio"
+                android:textSize="15sp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/enable_rtm_cb" />
+
             <TextView
                 android:id="@+id/params_title_tv"
                 android:layout_width="wrap_content"
@@ -28,7 +55,7 @@
                 android:text="@string/params"
                 android:textSize="15sp"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toBottomOf="@id/enable_save_audio_cb" />
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/params_layout"

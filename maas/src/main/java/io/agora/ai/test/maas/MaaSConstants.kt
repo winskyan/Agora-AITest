@@ -1,5 +1,7 @@
 package io.agora.ai.test.maas
 
+import io.agora.rtm.RtmConstants.RtmChannelType
+
 class MaaSConstants {
     companion object {
         const val TAG = "AgoraAITest-MaaSEngine"
@@ -139,5 +141,24 @@ class MaaSConstants {
             }
         }
     }
+
+    enum class RtmChannelType(val value: Int) {
+        NONE(0),
+        MESSAGE(1),
+        STREAM(2),
+        USER(3);
+
+        companion object {
+            fun getRtmChannelType(type: Int): RtmChannelType? {
+                for (rtmChannelType in RtmChannelType.entries) {
+                    if (rtmChannelType.value == type) {
+                        return rtmChannelType
+                    }
+                }
+                return null
+            }
+        }
+    }
+
 
 }

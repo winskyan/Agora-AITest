@@ -41,6 +41,21 @@ object SettingsDialog {
                         DemoContext.parseConfigJson(Utils.readAssetContent(context, "config.json"))
                     Log.d(TAG, "config: $config")
 
+                    binding.enableRtmCb.isChecked = DemoContext.isEnableRtm()
+                    binding.enableRtmCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableRtm(isChecked)
+                    }
+
+                    binding.enableStereoTestCb.isChecked = DemoContext.isEnableStereoTest()
+                    binding.enableStereoTestCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableStereoTest(isChecked)
+                    }
+
+                    binding.enableSaveAudioCb.isChecked = DemoContext.isEnableSaveAudio()
+                    binding.enableSaveAudioCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableSaveAudio(isChecked)
+                    }
+
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
                     createCheckboxes(constraintLayout, config, context)
 

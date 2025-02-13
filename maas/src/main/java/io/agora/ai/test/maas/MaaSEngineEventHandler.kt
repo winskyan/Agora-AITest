@@ -16,4 +16,12 @@ interface MaaSEngineEventHandler {
     fun onStreamMessage(uid: Int, data: ByteArray?)
 
     fun onAudioMetadataReceived(uid: Int, metadata: ByteArray?)
+    fun onRtmMessageReceived(
+        channelName: String,
+        topicName: String,
+        message: String,
+        publisherId: String,
+        customType: String,
+        timestamp: Long
+    )
 }

@@ -13,6 +13,7 @@ class MaaSEngineConfiguration(
     var appId: String,
     var userId: Int,
     var rtcToken: String,
+    var rtmToken: String,
     var enableMultiTurnShortTermMemory: Boolean,
     var userName: String,
     var agentVoiceName: String,
@@ -23,7 +24,8 @@ class MaaSEngineConfiguration(
     var speechRecognitionCompletenessLevel: MaaSConstants.SpeechRecognitionCompletenessLevel = MaaSConstants.SpeechRecognitionCompletenessLevel.NORMAL,
     var params: List<String>,
     var audioProfile: Int,
-    var audioScenario: Int
+    var audioScenario: Int,
+    var enableRtm: Boolean = false
 ) {
     constructor() : this(
         context = null,
@@ -32,6 +34,7 @@ class MaaSEngineConfiguration(
         enableSaveLogToFile = false,
         appId = "",
         rtcToken = "",
+        rtmToken = "",
         userId = 0,
         enableMultiTurnShortTermMemory = false,
         userName = "",
@@ -41,12 +44,13 @@ class MaaSEngineConfiguration(
         vadConfiguration = VadConfiguration(500),
         params = emptyList<String>(),
         audioProfile = Constants.AUDIO_PROFILE_DEFAULT,
-        audioScenario = Constants.AUDIO_SCENARIO_CHORUS
+        audioScenario = Constants.AUDIO_SCENARIO_CHORUS,
+        enableRtm = false
     ) {
 
     }
 
     override fun toString(): String {
-        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtcToken='$rtcToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario)"
+        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtcToken='$rtcToken', rtmToken='$rtmToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario , enableRtm=$enableRtm)"
     }
 }

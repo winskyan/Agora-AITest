@@ -9,8 +9,11 @@ object DemoContext {
     private var audioProfile: Int = 0//Constants.AUDIO_PROFILE_DEFAULT
     private var audioScenario: Int = 7 //Constants.AUDIO_SCENARIO_CHORUS
 
-    private var enableAudio = true
-    private var enableVideo = true
+    private var enableAudio = false
+    private var enableVideo = false
+    private var enableRtm = true
+    private var enableStereoTest = false
+    private var enableSaveAudio = false
 
     fun clearParams() {
         params = emptyArray()
@@ -64,5 +67,29 @@ object DemoContext {
 
     fun isEnableVideo(): Boolean {
         return enableVideo
+    }
+
+    fun setEnableRtm(enableRtm: Boolean) {
+        DemoContext.enableRtm = enableRtm
+    }
+
+    fun isEnableRtm(): Boolean {
+        return enableRtm
+    }
+
+    fun setEnableStereoTest(enableStereoTest: Boolean) {
+        DemoContext.enableStereoTest = enableStereoTest
+    }
+
+    fun isEnableStereoTest(): Boolean {
+        return enableStereoTest
+    }
+
+    fun setEnableSaveAudio(enableSaveAudio: Boolean) {
+        DemoContext.enableSaveAudio = enableSaveAudio
+    }
+
+    fun isEnableSaveAudio(): Boolean {
+        return enableSaveAudio
     }
 }

@@ -65,7 +65,7 @@ abstract class MaaSEngine {
 
     abstract fun sendAudioMetadata(metadata: ByteArray): Int
 
-    abstract fun sendRtmMessage(message: String): Int
+    abstract fun sendRtmMessage(message: ByteArray, channelType: MaaSConstants.RtmChannelType): Int
 
     protected abstract fun doDestroy()
 

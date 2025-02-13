@@ -50,7 +50,7 @@ object KeyCenter {
         }
     }
 
-    fun getRtmToken2(uid: Int): String? {
+    fun getRtmToken2(uid: Int): String {
         return try {
             RtmTokenBuilder2().buildToken(
                 APP_ID,
@@ -59,7 +59,7 @@ object KeyCenter {
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            ""
         }
     }
 }

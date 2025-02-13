@@ -47,4 +47,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(libs.agora.rtc)
+    implementation(libs.agora.rtm)
 }

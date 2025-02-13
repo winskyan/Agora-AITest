@@ -3,9 +3,9 @@ package io.agora.ai.test.maas.internal
 import android.util.Log
 import android.view.View
 import io.agora.ai.test.maas.MaaSConstants
-
 import io.agora.ai.test.maas.MaaSEngine
 import io.agora.ai.test.maas.MaaSEngineEventHandler
+import io.agora.ai.test.maas.internal.rtm.RtmManager
 import io.agora.ai.test.maas.internal.utils.Utils
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
@@ -23,21 +23,24 @@ import io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-class MaaSEngineInternal : MaaSEngine() {
+class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mRtcEngine: RtcEngine? = null
     private var mMaaSEngineConfiguration: MaaSEngineConfiguration? = null
     private var mEventCallback: MaaSEngineEventHandler? = null
     private var mDataStreamId: Int = -1
     private var mAudioFileName = ""
 
-    private val singleThreadExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val executor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val scope = CoroutineScope(executor)
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -129,14 +132,17 @@ class MaaSEngineInternal : MaaSEngine() {
 
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
 
+
             mRtcEngine?.setAudioProfile(configuration.audioProfile)
             mRtcEngine?.setAudioScenario(configuration.audioScenario)
 
             mRtcEngine?.setParameters("{\"rtc.enable_debug_log\":true}")
+
             for (params in configuration.params) {
                 mRtcEngine?.setParameters(params)
                 Log.d(MaaSConstants.TAG, "setParameters:$params")
             }
+
 //            mRtcEngine?.setParameters("{\"che.audio.aec.enable\":false}")
 //            mRtcEngine?.setParameters("{\"che.audio.ans.enable\":false}")
 //            mRtcEngine?.setParameters("{\"che.audio.agc.enable\":false}")
@@ -146,7 +152,6 @@ class MaaSEngineInternal : MaaSEngine() {
 
             mRtcEngine?.adjustRecordingSignalVolume(128)
 
-
             if (configuration.audioProfile == Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO) {
                 val options = AdvancedAudioOptions()
                 options.audioProcessingChannels =
@@ -155,6 +160,9 @@ class MaaSEngineInternal : MaaSEngine() {
             }
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
+            if (configuration.enableRtm) {
+                RtmManager.initialize(configuration)
+            }
 
             Log.d(
                 MaaSConstants.TAG, "initRtcEngine success"
@@ -202,13 +210,9 @@ class MaaSEngineInternal : MaaSEngine() {
         buffer.get(byteArray)
 
 
-        CoroutineScope(singleThreadExecutor).launch {
+        scope.launch {
             saveFile(mAudioFileName, byteArray)
         }
-    }
-
-    private fun shutdownExecutor() {
-        singleThreadExecutor.close()
     }
 
     private suspend fun saveFile(fileName: String, byteArray: ByteArray) {
@@ -388,6 +392,9 @@ class MaaSEngineInternal : MaaSEngine() {
             )
             return MaaSConstants.ERROR_GENERIC
         }
+        if (mMaaSEngineConfiguration?.enableRtm == true) {
+            RtmManager.subscribeChannelMessage(channelId)
+        }
         return MaaSConstants.OK
     }
 
@@ -399,15 +406,15 @@ class MaaSEngineInternal : MaaSEngine() {
         }
         try {
             mRtcEngine?.leaveChannel()
-            Log.d(
-                MaaSConstants.TAG, "leaveChannel"
-            )
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e(
                 MaaSConstants.TAG, "leaveChannel error:" + e.message
             )
             return MaaSConstants.ERROR_GENERIC
+        }
+        if (mMaaSEngineConfiguration?.enableRtm == true) {
+            RtmManager.unsubscribeChannelMessage()
         }
         return MaaSConstants.OK
     }
@@ -741,19 +748,35 @@ class MaaSEngineInternal : MaaSEngine() {
         }
     }
 
-    override fun sendRtmMessage(message: String): Int {
-        Log.d(MaaSConstants.TAG, "sendRtmMessage message:$message")
+    override fun sendRtmMessage(
+        message: ByteArray,
+        channelType: MaaSConstants.RtmChannelType
+    ): Int {
+        if (mMaaSEngineConfiguration?.enableRtm == true) {
+            RtmManager.sendRtmMessage(message, channelType)
+        } else {
+            Log.e(MaaSConstants.TAG, "sendRtmMessage error: not enabled")
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
         return MaaSConstants.OK
     }
 
+    override fun close() {
+        scope.cancel()
+        runBlocking(Dispatchers.Default) {
+            executor.close()
+        }
+    }
+
     override fun doDestroy() {
-        Log.d(MaaSConstants.TAG, "doDestroy")
         RtcEngine.destroy()
-        shutdownExecutor()
         mRtcEngine = null
         mMaaSEngineConfiguration = null
         mEventCallback = null
         mDataStreamId = -1
+        mAudioFileName = ""
+        Log.d(MaaSConstants.TAG, "rtc destroy")
     }
+
 
 }

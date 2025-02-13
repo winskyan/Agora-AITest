@@ -43,14 +43,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
-    <Button
-        android:id="@+id/btn_leave"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:text="@string/leave"
-        app:layout_constraintStart_toEndOf="@id/btn_join"
-        app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
     <EditText
         android:id="@+id/et_channel_name"
@@ -58,8 +50,16 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
+        app:layout_constraintEnd_toStartOf="@id/btn_clear"
+        app:layout_constraintStart_toEndOf="@id/btn_join"
+        app:layout_constraintTop_toBottomOf="@id/toolbar" />
+
+    <Button
+        android:id="@+id/btn_clear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/clear"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@id/btn_leave"
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
     <SurfaceView
@@ -146,14 +146,6 @@
         android:layout_height="wrap_content"
         android:text="@string/send_rtm_message"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_send_stream_message" />
-
-    <Button
-        android:id="@+id/btn_clear"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/clear"
-        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btn_send_stream_message" />
 
     <TextView
