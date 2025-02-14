@@ -393,7 +393,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return MaaSConstants.ERROR_GENERIC
         }
         if (mMaaSEngineConfiguration?.enableRtm == true) {
-            RtmManager.subscribeChannelMessage(channelId)
+            RtmManager.joinChannel(channelId)
         }
         return MaaSConstants.OK
     }
@@ -414,7 +414,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return MaaSConstants.ERROR_GENERIC
         }
         if (mMaaSEngineConfiguration?.enableRtm == true) {
-            RtmManager.unsubscribeChannelMessage()
+            RtmManager.leaveChannel()
         }
         return MaaSConstants.OK
     }
@@ -770,6 +770,9 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     override fun doDestroy() {
         RtcEngine.destroy()
+        if (mMaaSEngineConfiguration?.enableRtm == true) {
+            RtmManager.rtmLogout()
+        }
         mRtcEngine = null
         mMaaSEngineConfiguration = null
         mEventCallback = null

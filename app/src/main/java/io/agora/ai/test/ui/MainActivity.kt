@@ -45,7 +45,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     private var mSendAudioMetadataTime = 0L
     private var mSendStreamMessageTime = 0L
-    private var mSendRtcMessageTime = 0L
+    private var mSendRtmMessageTime = 0L
+    private var mSendRtmStreamMessageTime = 0L
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -286,18 +288,33 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnSendRtmMessage.setOnClickListener {
-            val rtmMessage = "rtmMessage:" + System.currentTimeMillis()
-            val ret = mMaaSEngine?.sendRtmMessage(
+            var rtmMessage = "rtmMessage:" + System.currentTimeMillis()
+            var ret = mMaaSEngine?.sendRtmMessage(
                 rtmMessage.toByteArray(Charsets.UTF_8),
                 MaaSConstants.RtmChannelType.MESSAGE
             )
+            mSendRtmMessageTime = System.currentTimeMillis()
             if (ret != 0) {
                 Log.d(TAG, "sendRtmMessage failed")
                 Toast.makeText(this, "sendRtmMessage failed", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            mSendRtcMessageTime = System.currentTimeMillis()
-            updateHistoryUI("SendRtcMessage:$rtmMessage")
+            updateHistoryUI("SendRtmMessage:$rtmMessage")
+
+            rtmMessage = "rtmStreamMessage:" + System.currentTimeMillis()
+            ret = mMaaSEngine?.sendRtmMessage(
+                rtmMessage.toByteArray(Charsets.UTF_8),
+                MaaSConstants.RtmChannelType.STREAM
+            )
+            mSendRtmStreamMessageTime = System.currentTimeMillis()
+            if (ret != 0) {
+                Log.d(TAG, "sendRtmStreamMessage failed")
+                Toast.makeText(this, "sendRtmStreamMessage failed", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            updateHistoryUI("SendRtmStreamMessage:$rtmMessage")
+
+
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
@@ -367,7 +384,6 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
-        Log.d(TAG, "onUserJoined uid:$uid elapsed:$elapsed")
         runOnUiThread {
             mMaaSEngine?.setupRemoteVideo(
                 binding.remoteView,
@@ -409,6 +425,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     override fun onRtmMessageReceived(
+        channelType: MaaSConstants.RtmChannelType,
         channelName: String,
         topicName: String,
         message: String,
@@ -420,12 +437,22 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             TAG,
             "onRtmMessageReceived channelName:$channelName topicName:$topicName message:$message publisherId:$publisherId customType:$customType timestamp:$timestamp"
         )
-        if (0L != mSendRtcMessageTime) {
-            val diff = System.currentTimeMillis() - mSendRtcMessageTime
-            updateHistoryUI("ReceiveRtmMessage:$message diff:$diff")
-        } else {
-            updateHistoryUI("ReceiveRtmMessage:$message")
+        if (channelType == MaaSConstants.RtmChannelType.MESSAGE) {
+            if (0L != mSendRtmMessageTime) {
+                val diff = System.currentTimeMillis() - mSendRtmMessageTime
+                updateHistoryUI("ReceiveRtmMessage:$message diff:$diff")
+            } else {
+                updateHistoryUI("ReceiveRtmMessage:$message")
+            }
+        } else if (channelType == MaaSConstants.RtmChannelType.STREAM) {
+            if (0L != mSendRtmStreamMessageTime) {
+                val diff = System.currentTimeMillis() - mSendRtmStreamMessageTime
+                updateHistoryUI("ReceiveRtmStreamMessage:$message diff:$diff")
+            } else {
+                updateHistoryUI("ReceiveRtmStreamMessage:$message")
+            }
         }
+
     }
 
     private fun captureScreenToByteBuffer(view: View): ByteBuffer {

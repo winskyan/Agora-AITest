@@ -17,6 +17,7 @@ interface MaaSEngineEventHandler {
 
     fun onAudioMetadataReceived(uid: Int, metadata: ByteArray?)
     fun onRtmMessageReceived(
+        channelType: MaaSConstants.RtmChannelType,
         channelName: String,
         topicName: String,
         message: String,
