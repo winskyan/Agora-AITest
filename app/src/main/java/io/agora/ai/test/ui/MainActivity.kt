@@ -25,8 +25,18 @@ import io.agora.ai.test.maas.model.VadConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.ai.test.ui.dialog.SettingsDialog
 import io.agora.ai.test.utils.KeyCenter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
+import java.io.File
+import java.io.FileWriter
+import java.io.IOException
 import java.nio.ByteBuffer
 import kotlin.system.exitProcess
 
@@ -34,6 +44,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     companion object {
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
+
+        const val RTM_TEST_MAX_COUNT = 100
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -48,6 +60,17 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var mSendRtmMessageTime = 0L
     private var mSendRtmStreamMessageTime = 0L
 
+    private var mSendRtmMessage = ""
+    private var mSendRtmStreamMessage = ""
+    private var mReceiveRtmMessageTotalTime = 0L
+    private var mReceiveRtmMessageTotalCount = 0
+    private var mReceiveRtmStreamMessageTotalTime = 0L
+    private var mReceiveRtmStreamMessageTotalCount = 0
+
+    private var sendingJob: Job? = null
+
+    private var mHistoryFileName = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,9 +81,18 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         initView()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        stopSendingRtmMessages()
+    }
+
     private fun checkPermissions() {
         val permissions =
-            arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+            arrayOf(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CAMERA,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
         if (EasyPermissions.hasPermissions(this, *permissions)) {
             // 已经获取到权限，执行相应的操作
             Log.d(TAG, "granted permission")
@@ -168,6 +200,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
+                stopSendingRtmMessages()
                 if (DemoContext.isEnableAudio()) {
                     mMaaSEngine?.disableAudio()
                     DemoContext.setEnableAudio(false)
@@ -183,6 +216,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 if (channelName.isEmpty()) {
                     channelName = mChannelName
                 }
+                mHistoryFileName = "history_${channelName}_${System.currentTimeMillis()}.txt"
                 initEngine()
                 mMaaSEngine?.joinChannel(
                     channelName,
@@ -288,33 +322,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnSendRtmMessage.setOnClickListener {
-            var rtmMessage = "rtmMessage:" + System.currentTimeMillis()
-            var ret = mMaaSEngine?.sendRtmMessage(
-                rtmMessage.toByteArray(Charsets.UTF_8),
-                MaaSConstants.RtmChannelType.MESSAGE
-            )
-            mSendRtmMessageTime = System.currentTimeMillis()
-            if (ret != 0) {
-                Log.d(TAG, "sendRtmMessage failed")
-                Toast.makeText(this, "sendRtmMessage failed", Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            updateHistoryUI("SendRtmMessage:$rtmMessage")
-
-            rtmMessage = "rtmStreamMessage:" + System.currentTimeMillis()
-            ret = mMaaSEngine?.sendRtmMessage(
-                rtmMessage.toByteArray(Charsets.UTF_8),
-                MaaSConstants.RtmChannelType.STREAM
-            )
-            mSendRtmStreamMessageTime = System.currentTimeMillis()
-            if (ret != 0) {
-                Log.d(TAG, "sendRtmStreamMessage failed")
-                Toast.makeText(this, "sendRtmStreamMessage failed", Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            updateHistoryUI("SendRtmStreamMessage:$rtmMessage")
-
-
+            binding.btnSendRtmMessage.isEnabled = false
+            startSendingRtmMessages()
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
@@ -322,6 +331,74 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnClear.setOnClickListener {
             binding.tvHistory.text = ""
         }
+    }
+
+    private fun startSendingRtmMessages() {
+        // Cancel any existing coroutine job to avoid multiple instances running
+        sendingJob?.cancel()
+        mSendRtmMessageTime = 0L
+        mSendRtmStreamMessageTime = 0L
+        mReceiveRtmMessageTotalTime = 0L
+        mReceiveRtmMessageTotalCount = 0
+        mReceiveRtmStreamMessageTotalTime = 0L
+        mReceiveRtmStreamMessageTotalCount = 0
+
+
+        // Launch a new coroutine to send messages every second
+        sendingJob = CoroutineScope(Dispatchers.Main).launch {
+            var count = 0
+            while (count < RTM_TEST_MAX_COUNT && isActive) {
+                sendRtmMessages()
+                count++
+                delay(1000)
+            }
+        }
+
+        // Enable the button after the coroutine job is finished
+        sendingJob?.invokeOnCompletion {
+            runOnUiThread {
+                binding.btnSendRtmMessage.isEnabled = true
+            }
+        }
+    }
+
+    private fun stopSendingRtmMessages() {
+        if (sendingJob?.isActive == true) {
+            sendingJob?.cancel()
+        }
+    }
+
+    private suspend fun sendRtmMessages() {
+        mSendRtmMessageTime = System.currentTimeMillis()
+        mSendRtmMessage = "rtmMessage:$mSendRtmMessageTime"
+        var ret = mMaaSEngine?.sendRtmMessage(
+            mSendRtmMessage.toByteArray(Charsets.UTF_8),
+            MaaSConstants.RtmChannelType.MESSAGE
+        )
+        if (ret != 0) {
+            Log.d(TAG, "sendRtmMessage failed")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, "sendRtmMessage failed", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        updateHistoryUI("SendRtmMessage:$mSendRtmMessage")
+
+        mSendRtmStreamMessageTime = System.currentTimeMillis()
+        mSendRtmStreamMessage = "rtmStreamMessage:$mSendRtmStreamMessageTime"
+        ret = mMaaSEngine?.sendRtmMessage(
+            mSendRtmStreamMessage.toByteArray(Charsets.UTF_8),
+            MaaSConstants.RtmChannelType.STREAM
+        )
+        if (ret != 0) {
+            Log.d(TAG, "sendRtmStreamMessage failed")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, "sendRtmStreamMessage failed", Toast.LENGTH_LONG)
+                    .show()
+            }
+            return
+        }
+        updateHistoryUI("SendRtmStreamMessage:$mSendRtmStreamMessage")
     }
 
     private fun handleOnBackPressed() {
@@ -438,16 +515,22 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             "onRtmMessageReceived channelName:$channelName topicName:$topicName message:$message publisherId:$publisherId customType:$customType timestamp:$timestamp"
         )
         if (channelType == MaaSConstants.RtmChannelType.MESSAGE) {
-            if (0L != mSendRtmMessageTime) {
-                val diff = System.currentTimeMillis() - mSendRtmMessageTime
-                updateHistoryUI("ReceiveRtmMessage:$message diff:$diff")
+            if (0L != mSendRtmMessageTime && message == mSendRtmMessage) {
+                val currentTime = System.currentTimeMillis()
+                val diff = currentTime - mSendRtmMessageTime
+                mReceiveRtmMessageTotalCount++
+                mReceiveRtmMessageTotalTime += diff
+                updateHistoryUI("$currentTime:ReceiveRtmMessage:$message diff:$diff total:$mReceiveRtmMessageTotalCount avg:${mReceiveRtmMessageTotalTime / mReceiveRtmMessageTotalCount}")
             } else {
                 updateHistoryUI("ReceiveRtmMessage:$message")
             }
         } else if (channelType == MaaSConstants.RtmChannelType.STREAM) {
-            if (0L != mSendRtmStreamMessageTime) {
-                val diff = System.currentTimeMillis() - mSendRtmStreamMessageTime
-                updateHistoryUI("ReceiveRtmStreamMessage:$message diff:$diff")
+            if (0L != mSendRtmStreamMessageTime && message == mSendRtmStreamMessage) {
+                val currentTime = System.currentTimeMillis()
+                val diff = currentTime - mSendRtmStreamMessageTime
+                mReceiveRtmStreamMessageTotalCount++
+                mReceiveRtmStreamMessageTotalTime += diff
+                updateHistoryUI("$currentTime:ReceiveRtmStreamMessage:$message diff:$diff total:$mReceiveRtmStreamMessageTotalCount avg:${mReceiveRtmStreamMessageTotalTime / mReceiveRtmStreamMessageTotalCount}")
             } else {
                 updateHistoryUI("ReceiveRtmStreamMessage:$message")
             }
@@ -482,7 +565,27 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     private fun updateHistoryUI(message: String) {
         runOnUiThread {
-            binding.tvHistory.text = binding.tvHistory.text.toString() + "\r\n" + message
+            binding.tvHistory.append("\r\n$message")
+            val scrollAmount =
+                binding.tvHistory.layout.getLineTop(binding.tvHistory.lineCount) - binding.tvHistory.height
+            if (scrollAmount > 0) {
+                binding.tvHistory.scrollTo(0, scrollAmount)
+            } else {
+                binding.tvHistory.scrollTo(0, 0)
+            }
+            writeMessageToFile(message)
+        }
+    }
+
+    private fun writeMessageToFile(message: String) {
+        val cacheDir = externalCacheDir
+        val logFile = File(cacheDir, mHistoryFileName)
+        try {
+            val writer = FileWriter(logFile, true)
+            writer.append(message).append("\n")
+            writer.close()
+        } catch (e: IOException) {
+            Log.e(TAG, "Error writing message to file", e)
         }
     }
 }
