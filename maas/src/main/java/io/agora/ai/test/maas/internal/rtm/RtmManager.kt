@@ -22,6 +22,9 @@ import io.agora.rtm.SubscribeTopicResult
 import io.agora.rtm.TopicEvent
 import io.agora.rtm.TopicMessageOptions
 import io.agora.rtm.TopicOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 object RtmManager {
@@ -86,6 +89,14 @@ object RtmManager {
                     override fun onTopicEvent(event: TopicEvent?) {
                         super.onTopicEvent(event)
                         Log.d(MaaSConstants.TAG, "Rtm onTopicEvent: $event")
+                        if (event?.type == RtmConstants.RtmTopicEventType.REMOTE_JOIN ||
+                            event?.type == RtmConstants.RtmTopicEventType.SNAPSHOT
+                        ) {
+                            CoroutineScope(Dispatchers.Main).launch {
+                                subscribeTopic(mRoomName)
+                            }
+                        }
+
                     }
                 })
                 .build()
@@ -169,7 +180,8 @@ object RtmManager {
         mStreamChannel?.join(options, object : ResultCallback<Void?> {
             override fun onSuccess(responseInfo: Void?) {
                 Log.d(MaaSConstants.TAG, "rtm join stream channel success")
-                joinTopic(roomName)
+                CoroutineScope(Dispatchers.Main).launch { joinTopic(roomName) }
+
             }
 
             override fun onFailure(errorInfo: ErrorInfo) {
@@ -185,7 +197,9 @@ object RtmManager {
         mStreamChannel?.joinTopic(roomName, topicOptions, object : ResultCallback<Void?> {
             override fun onSuccess(responseInfo: Void?) {
                 Log.d(MaaSConstants.TAG, "rtm join topic success")
-                subscribeTopic(roomName)
+                CoroutineScope(Dispatchers.Main).launch {
+                    subscribeTopic(roomName)
+                }
             }
 
             override fun onFailure(errorInfo: ErrorInfo) {
@@ -318,7 +332,10 @@ object RtmManager {
     }
 
     private fun sendStreamMessage(message: ByteArray) {
-        Log.d(MaaSConstants.TAG, "send rtm stream message: ${String(message)}")
+        Log.d(
+            MaaSConstants.TAG,
+            "send rtm stream message: ${String(message)} , channelType: STREAM"
+        )
 
         val topicName = mRoomName
         val options = TopicMessageOptions()
@@ -329,7 +346,10 @@ object RtmManager {
             options,
             object : ResultCallback<Void?> {
                 override fun onSuccess(responseInfo: Void?) {
-                    Log.d(MaaSConstants.TAG, "send rtm stream message success")
+                    Log.d(
+                        MaaSConstants.TAG,
+                        "send rtm stream message success for channelType: STREAM"
+                    )
                 }
 
                 override fun onFailure(errorInfo: ErrorInfo) {
