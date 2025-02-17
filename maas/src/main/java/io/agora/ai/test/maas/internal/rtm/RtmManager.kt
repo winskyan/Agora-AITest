@@ -38,7 +38,9 @@ object RtmManager {
     fun initialize(configuration: MaaSEngineConfiguration) {
         Log.d(MaaSConstants.TAG, "rtm initialize")
         mLoginSuccess = false
-        mRtmToken = configuration.rtmToken
+        mRtmToken = configuration.rtmToken.ifEmpty {
+            configuration.appId
+        }
         mEventCallback = configuration.eventHandler
         val rtmConfig =
             RtmConfig.Builder(configuration.appId, configuration.userId.toString())
@@ -60,7 +62,7 @@ object RtmManager {
                                 rtmMessage,
                                 event.publisherId,
                                 event.customType,
-                                event.timestamp
+                                0//event.timestamp
                             )
                         } else if (event?.channelType == RtmConstants.RtmChannelType.STREAM) {
                             var rtmMessage: String = ""
@@ -76,7 +78,7 @@ object RtmManager {
                                 rtmMessage,
                                 event.publisherId,
                                 event.customType,
-                                event.timestamp
+                                0//event.timestamp
                             )
                         }
                     }
@@ -105,7 +107,7 @@ object RtmManager {
             mRtmClient = RtmClient.create(rtmConfig)
 
             mRtmClient?.login(
-                configuration.rtmToken,
+                mRtmToken,
                 object : ResultCallback<Void> {
                     override fun onSuccess(p0: Void?) {
                         Log.d(MaaSConstants.TAG, "rtm login onSuccess")

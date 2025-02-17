@@ -370,8 +370,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             val ret = mMaaSEngineConfiguration?.userId?.let {
                 mAudioFileName +=
                     channelId + "_" + it + "_" + System.currentTimeMillis() + ".pcm"
+                val rtcToken =
+                    if (mMaaSEngineConfiguration?.rtcToken?.isEmpty() == true) mMaaSEngineConfiguration?.appId else mMaaSEngineConfiguration?.rtcToken
                 mRtcEngine?.joinChannel(
-                    mMaaSEngineConfiguration?.rtcToken,
+                    rtcToken,
                     channelId,
                     it,
                     object : ChannelMediaOptions() {

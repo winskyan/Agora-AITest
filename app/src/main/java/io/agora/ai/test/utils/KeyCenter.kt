@@ -26,6 +26,9 @@ object KeyCenter {
     }
 
     fun getRtcToken(channelId: String?, uid: Int): String {
+        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+            return ""
+        }
         return RtcTokenBuilder().buildTokenWithUid(
             APP_ID,
             BuildConfig.APP_CERTIFICATE,
@@ -37,6 +40,9 @@ object KeyCenter {
     }
 
     fun getRtmToken(uid: Int): String? {
+        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+            return ""
+        }
         return try {
             RtmTokenBuilder().buildToken(
                 APP_ID,
@@ -51,6 +57,9 @@ object KeyCenter {
     }
 
     fun getRtmToken2(uid: Int): String {
+        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+            return ""
+        }
         return try {
             RtmTokenBuilder2().buildToken(
                 APP_ID,
