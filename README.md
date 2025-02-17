@@ -1,37 +1,27 @@
-# MaaSEngine 使用指南
+# Agora AITest
 
-`MaaSEngine` 是一个抽象类，提供了一系列用于视频、音频和消息处理的接口。本文档将介绍如何使用该类及其方法。
+## 运行 Example
 
-## 目录
+### 配置 Key
 
-- [初始化 MaaSEngine](#初始化-maasengine)
-- [加入和离开频道](#加入和离开频道)
-- [视频操作](#视频操作)
-    - [开始和停止视频](#开始和停止视频)
-    - [设置视频编码配置](#设置视频编码配置)
-    - [设置远程视频](#设置远程视频)
-    - [切换摄像头](#切换摄像头)
-    - [添加和清除视频水印](#添加和清除视频水印)
-- [音频操作](#音频操作)
-    - [启用和禁用音频](#启用和禁用音频)
-    - [调整音量](#调整音量)
-- [消息操作](#消息操作)
-    - [发送文本消息](#发送文本消息)
-    - [发送 RTM 消息](#发送-rtm-消息)
-    - [发送音频元数据](#发送音频元数据)
-- [获取 SDK 版本](#获取-sdk-版本)
-- [销毁 MaaSEngine 实例](#销毁-maasengine-实例)
-
-## 初始化 MaaSEngine
-
-在使用 `MaaSEngine` 之前，需要先创建并初始化一个 `MaaSEngine` 实例。
-
-使用前需在 `local.properties` 中配置 KEY 参数：
+在 `local.properties` 文件中配置以下信息：
 
 ```properties
-APP_CERTIFICATE=你的证书密钥
 APP_ID=你的应用ID
+APP_CERTIFICATE=你的证书密钥
 ```
+
+### 运行
+
+在 Android Studio 中打开项目，选择 `app` 模块并运行。
+
+## MaaSEngine 使用指南
+
+`MaaSEngine` 是一个抽象类，提供了视频、音频和消息处理的接口。本文将介绍如何使用该类及其方法。
+
+### 初始化 MaaSEngine
+
+在使用 `MaaSEngine` 之前，需要先创建并初始化一个 `MaaSEngine` 实例：
 
 ```kotlin
 val maasEngine = MaaSEngine.create()
@@ -44,7 +34,7 @@ if (result == 0) {
 }
 ```
 
-## 加入和离开频道
+### 加入和离开频道
 
 ```kotlin
 val channelId = "your_channel_id"
@@ -63,9 +53,9 @@ if (leaveResult == 0) {
 }
 ```
 
-## 视频操作
+### 视频操作
 
-### 开始和停止视频
+#### 开始和停止视频
 
 ```kotlin
 val view: View? = /* 视频显示的视图 */
@@ -87,7 +77,7 @@ if (stopVideoResult == 0) {
 }
 ```
 
-### 设置视频编码配置
+#### 设置视频编码配置
 
 ```kotlin
 val width = 1280
@@ -106,7 +96,7 @@ if (setVideoEncoderConfigResult == 0) {
 }
 ```
 
-### 设置远程视频
+#### 设置远程视频
 
 ```kotlin
 val remoteView: View? = /* 远程视频显示的视图 */
@@ -121,7 +111,7 @@ if (setupRemoteVideoResult == 0) {
 }
 ```
 
-### 切换摄像头
+#### 切换摄像头
 
 ```kotlin
 val switchCameraResult = maasEngine?.switchCamera()
@@ -132,17 +122,14 @@ if (switchCameraResult == 0) {
 }
 ```
 
-### 添加和清除视频水印
+#### 添加和清除视频水印
 
 ```kotlin
-val watermarkOptions = WatermarkOptions()
-val width = 200
-val height = 200
-watermarkOptions.positionInPortraitMode =
-    WatermarkOptions.Rectangle(0, 0, width, height)
-watermarkOptions.positionInLandscapeMode =
-    WatermarkOptions.Rectangle(0, 0, width, height)
-watermarkOptions.visibleInPreview = true
+val watermarkOptions = WatermarkOptions().apply {
+    positionInPortraitMode = WatermarkOptions.Rectangle(0, 0, 200, 200)
+    positionInLandscapeMode = WatermarkOptions.Rectangle(0, 0, 200, 200)
+    visibleInPreview = true
+}
 
 val rootView = window.decorView.rootView
 val screenBuffer = captureScreenToByteBuffer(rootView)
@@ -168,9 +155,9 @@ if (clearWatermarksResult == 0) {
 }
 ```
 
-## 音频操作
+### 音频操作
 
-### 启用和禁用音频
+#### 启用和禁用音频
 
 ```kotlin
 val enableAudioResult = maasEngine?.enableAudio()
@@ -188,7 +175,7 @@ if (disableAudioResult == 0) {
 }
 ```
 
-### 调整音量
+#### 调整音量
 
 ```kotlin
 val playbackVolume = 50
@@ -208,9 +195,9 @@ if (adjustRecordingVolumeResult == 0) {
 }
 ```
 
-## 消息操作
+### 消息操作
 
-### 发送文本消息
+#### 发送文本消息
 
 ```kotlin
 val textMessage = "Hello, World!"
@@ -222,7 +209,7 @@ if (sendTextResult == 0) {
 }
 ```
 
-### 发送 RTM 消息
+#### 发送 RTM 消息
 
 ```kotlin
 val rtmMessage = "RTM Message"
@@ -235,7 +222,7 @@ if (sendRtmMessageResult == 0) {
 }
 ```
 
-### 发送音频元数据
+#### 发送音频元数据
 
 ```kotlin
 val audioMetadata = byteArrayOf(1, 2, 3, 4, 5)
@@ -247,119 +234,17 @@ if (sendAudioMetadataResult == 0) {
 }
 ```
 
-## 获取 SDK 版本
+### 获取 SDK 版本
 
 ```kotlin
 val sdkVersion = MaaSEngine.getSdkVersion()
 println("SDK Version: $sdkVersion")
 ```
 
-## 销毁 MaaSEngine 实例
+### 销毁 MaaSEngine 实例
 
 ```kotlin
 MaaSEngine.destroy()
 ```
 
-## 完整代码示例
-
-```kotlin
-import android.view.View
-import androidx.annotation.Keep
-import io.agora.ai.test.maas.internal.MaaSEngineInternal
-import io.agora.ai.test.maas.model.MaaSEngineConfiguration
-import io.agora.ai.test.maas.model.WatermarkOptions
-import java.nio.ByteBuffer
-
-abstract class MaaSEngine {
-    abstract fun initialize(configuration: MaaSEngineConfiguration): Int
-
-    abstract fun joinChannel(
-        channelId: String,
-        roleType: Int = MaaSConstants.CLIENT_ROLE_BROADCASTER,
-        registerRecordingAudio: Boolean = false,
-        registerPlaybackAudio: Boolean = false
-    ): Int
-
-    abstract fun leaveChannel(): Int
-    abstract fun startVideo(
-        view: View?,
-        renderMode: MaaSConstants.RenderMode?,
-        position: MaaSConstants.VideoModulePosition = MaaSConstants.VideoModulePosition.VIDEO_MODULE_POSITION_POST_CAPTURER
-    ): Int
-
-    abstract fun stopVideo(): Int
-    abstract fun setVideoEncoderConfiguration(
-        width: Int,
-        height: Int,
-        frameRate: MaaSConstants.FrameRate,
-        orientationMode: MaaSConstants.OrientationMode,
-        enableMirrorMode: Boolean
-    ): Int
-
-    abstract fun setupRemoteVideo(
-        view: View?,
-        renderMode: MaaSConstants.RenderMode?,
-        remoteUid: Int
-    ): Int
-
-    abstract fun switchCamera(): Int
-
-    abstract fun addVideoWatermark(watermarkUrl: String, watermarkOptions: WatermarkOptions): Int
-
-    abstract fun addVideoWatermark(
-        data: ByteBuffer,
-        width: Int,
-        height: Int,
-        format: MaaSConstants.VideoFormat,
-        options: WatermarkOptions
-    ): Int
-
-    abstract fun clearVideoWatermarks(): Int
-
-    abstract fun enableAudio(): Int
-
-    abstract fun disableAudio(): Int
-
-    abstract fun adjustPlaybackSignalVolume(volume: Int): Int
-
-    abstract fun adjustRecordingSignalVolume(volume: Int): Int
-
-    abstract fun sendText(text: String): Int
-
-    abstract fun sendAudioMetadata(metadata: ByteArray): Int
-
-    abstract fun sendRtmMessage(message: ByteArray, channelType: MaaSConstants.RtmChannelType): Int
-
-    protected abstract fun doDestroy()
-
-    companion object {
-        @JvmStatic
-        private var mInstance: MaaSEngine? = null
-
-        @JvmStatic
-        @Synchronized
-        @Keep
-        fun create(): MaaSEngine? {
-            if (mInstance == null) {
-                mInstance = MaaSEngineInternal()
-            }
-            return mInstance
-        }
-
-        @JvmStatic
-        @Synchronized
-        @Keep
-        fun destroy() {
-            mInstance?.doDestroy()
-            mInstance = null
-        }
-
-        @JvmStatic
-        @Synchronized
-        @Keep
-        fun getSdkVersion(): String {
-            return BuildConfig.VERSION_NAME
-        }
-    }
-}
-```
+通过以上步骤，你可以轻松地使用 `MaaSEngine` 进行视频、音频和消息的处理。
