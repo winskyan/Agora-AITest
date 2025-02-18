@@ -21,5 +21,6 @@
     <string name="enable_rtm">Enable Rtm</string>
     <string name="enable_stereo_test">Enable Stereo Test</string>
     <string name="enable_save_audio">Enable Save Audio</string>
+    <string name="channel_name">Channel Name</string>
 
 </resources>
