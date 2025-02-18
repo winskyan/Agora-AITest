@@ -96,4 +96,5 @@ dependencies {
     implementation(libs.agora.authentication)
     implementation(libs.commons.codec)
     implementation(libs.gson)
+    implementation(libs.mmkv)
 }

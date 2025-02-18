@@ -41,36 +41,36 @@ object SettingsDialog {
                         DemoContext.parseConfigJson(Utils.readAssetContent(context, "config.json"))
                     Log.d(TAG, "config: $config")
 
-                    binding.enableRtmCb.isChecked = DemoContext.isEnableRtm()
+                    binding.enableRtmCb.isChecked = DemoContext.enableRtm
                     binding.enableRtmCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableRtm(isChecked)
+                        DemoContext.enableRtm = isChecked
                     }
 
-                    binding.enableStereoTestCb.isChecked = DemoContext.isEnableStereoTest()
+                    binding.enableStereoTestCb.isChecked = DemoContext.enableStereoTest
                     binding.enableStereoTestCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableStereoTest(isChecked)
+                        DemoContext.enableStereoTest = isChecked
                     }
 
-                    binding.enableSaveAudioCb.isChecked = DemoContext.isEnableSaveAudio()
+                    binding.enableSaveAudioCb.isChecked = DemoContext.enableSaveAudio
                     binding.enableSaveAudioCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableSaveAudio(isChecked)
+                        DemoContext.enableSaveAudio = isChecked
                     }
 
                     binding.enableRtcDataStreamTestCb.isChecked =
-                        DemoContext.isEnableTestRtcDataStreamMessage()
+                        DemoContext.enableTestRtcDataStreamMessage
                     binding.enableRtcDataStreamTestCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableTestRtcDataStreamMessage(isChecked)
+                        DemoContext.enableTestRtcDataStreamMessage = isChecked
                     }
 
                     binding.enableRtcAudioMetaDataTestCb.isChecked =
-                        DemoContext.isEnableTestRtcAudioMetadata()
+                        DemoContext.enableTestRtcAudioMetadata
                     binding.enableRtcAudioMetaDataTestCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableTestRtcAudioMetadata(isChecked)
+                        DemoContext.enableTestRtcAudioMetadata = isChecked
                     }
 
-                    binding.enableRtmMessageTestCb.isChecked = DemoContext.isEnableTestRtmMessage()
+                    binding.enableRtmMessageTestCb.isChecked = DemoContext.enableTestRtmMessage
                     binding.enableRtmMessageTestCb.setOnCheckedChangeListener { _, isChecked ->
-                        DemoContext.setEnableTestRtmMessage(isChecked)
+                        DemoContext.enableTestRtmMessage = isChecked
                     }
 
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
@@ -99,7 +99,7 @@ object SettingsDialog {
         context: Context
     ) {
         var viewIndex = 0
-        val selectedParams = DemoContext.getParams().toMutableSet()
+        val selectedParams = DemoContext.params.toMutableSet()
         config.params.forEach { paramsObj ->
             paramsObj.forEach { (key, valueList) ->
                 (valueList as List<String>).forEachIndexed { index, param ->
@@ -110,9 +110,9 @@ object SettingsDialog {
                         isChecked = selectedParams.contains(param)
                         setOnCheckedChangeListener { _, isChecked ->
                             if (isChecked) {
-                                DemoContext.addParams(param)
+                                DemoContext.params += param
                             } else {
-                                DemoContext.removeParams(param)
+                                DemoContext.params.filter { it != param }.toTypedArray()
                             }
                         }
                     }
@@ -169,13 +169,13 @@ object SettingsDialog {
                     id = View.generateViewId()
                     text = key + ":" + value
                     isChecked =
-                        isProfile && DemoContext.getAudioProfile() == value || !isProfile && DemoContext.getAudioScenario() == value
+                        isProfile && DemoContext.audioProfile == value || !isProfile && DemoContext.audioScenario == value
                     setOnCheckedChangeListener { _, isChecked ->
                         if (isChecked) {
                             if (isProfile) {
-                                DemoContext.setAudioProfile(value)
+                                DemoContext.audioProfile = value
                             } else {
-                                DemoContext.setAudioScenario(value)
+                                DemoContext.audioScenario = value
                             }
                         }
                     }

@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.rtmUserId = KeyCenter.getRtmUid()
         configuration.rtcToken = KeyCenter.getRtcToken(mChannelName, KeyCenter.getRtcUid())
         configuration.rtmToken =
-            if (DemoContext.isEnableRtm()) KeyCenter.getRtmToken2(KeyCenter.getRtmUid()) else ""
+            if (DemoContext.enableRtm) KeyCenter.getRtmToken2(KeyCenter.getRtmUid()) else ""
         configuration.enableMultiTurnShortTermMemory = true
         configuration.userName = "test"
         configuration.agentVoiceName = "xiaoyan"
@@ -199,14 +199,14 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.noiseEnvironment = MaaSConstants.NoiseEnvironment.NOISE
         configuration.speechRecognitionCompletenessLevel =
             MaaSConstants.SpeechRecognitionCompletenessLevel.NORMAL
-        configuration.params = DemoContext.getParams().toList()
-        configuration.enableRtm = DemoContext.isEnableRtm()
+        configuration.params = DemoContext.params.toList()
+        configuration.enableRtm = DemoContext.enableRtm
 
-        if (DemoContext.getAudioProfile() != -1) {
-            configuration.audioProfile = DemoContext.getAudioProfile()
+        if (DemoContext.audioProfile != -1) {
+            configuration.audioProfile = DemoContext.audioProfile
         }
-        if (DemoContext.getAudioScenario() != -1) {
-            configuration.audioScenario = DemoContext.getAudioScenario()
+        if (DemoContext.audioScenario != -1) {
+            configuration.audioScenario = DemoContext.audioScenario
         }
 
         val ret = mMaaSEngine?.initialize(configuration)
@@ -214,11 +214,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             Log.d(TAG, "initialize failed")
         }
 
-        if (DemoContext.isEnableAudio()) {
+        if (DemoContext.enableAudio) {
             mMaaSEngine?.enableAudio()
+        } else {
+            mMaaSEngine?.disableAudio()
         }
 
-        if (DemoContext.isEnableVideo()) {
+        if (DemoContext.enableVideo) {
             mMaaSEngine?.startVideo(
                 binding.localView,
                 MaaSConstants.RenderMode.HIDDEN
@@ -245,13 +247,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
                 stopSendingMessagesTest()
-                if (DemoContext.isEnableAudio()) {
+                if (DemoContext.enableAudio) {
                     mMaaSEngine?.disableAudio()
-                    DemoContext.setEnableAudio(false)
+                    DemoContext.enableAudio = false
                 }
-                if (DemoContext.isEnableVideo()) {
+                if (DemoContext.enableVideo) {
                     mMaaSEngine?.stopVideo()
-                    DemoContext.setEnableVideo(false)
+                    DemoContext.enableVideo = false
                 }
                 mMaaSEngine?.leaveChannel()
                 MaaSEngine.destroy()
@@ -269,33 +271,33 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 mMaaSEngine?.joinChannel(
                     channelName,
                     MaaSConstants.CLIENT_ROLE_BROADCASTER,
-                    registerRecordingAudio = DemoContext.isEnableStereoTest(),
-                    registerPlaybackAudio = DemoContext.isEnableSaveAudio()
+                    registerRecordingAudio = DemoContext.enableStereoTest,
+                    registerPlaybackAudio = DemoContext.enableSaveAudio
                 )
             }
 
         }
 
         binding.btnEnableAudio.setOnClickListener {
-            if (DemoContext.isEnableAudio()) {
+            if (DemoContext.enableAudio) {
                 mMaaSEngine?.disableAudio()
-                DemoContext.setEnableAudio(false)
+                DemoContext.enableAudio = false
             } else {
                 mMaaSEngine?.enableAudio()
-                DemoContext.setEnableAudio(true)
+                DemoContext.enableAudio = true
             }
 
             binding.btnEnableAudio.text =
-                if (DemoContext.isEnableAudio()) getText(R.string.disable_audio) else getText(
+                if (DemoContext.enableAudio) getText(R.string.disable_audio) else getText(
                     R.string.enable_audio
                 )
         }
 
 
         binding.btnEnableVideo.setOnClickListener {
-            if (DemoContext.isEnableVideo()) {
+            if (DemoContext.enableVideo) {
                 mMaaSEngine?.stopVideo()
-                DemoContext.setEnableVideo(false)
+                DemoContext.enableVideo = false
             } else {
                 mMaaSEngine?.startVideo(
                     binding.localView,
@@ -309,11 +311,11 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     MaaSConstants.OrientationMode.FIXED_LANDSCAPE,
                     false
                 )
-                DemoContext.setEnableVideo(true)
+                DemoContext.enableVideo = true
             }
 
             binding.btnEnableVideo.text =
-                if (DemoContext.isEnableVideo()) getText(R.string.disable_video) else getText(R.string.enable_video)
+                if (DemoContext.enableVideo) getText(R.string.disable_video) else getText(R.string.enable_video)
         }
 
 
@@ -353,7 +355,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnSendStreamMessage.setOnClickListener {
-            if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+            if (DemoContext.enableTestRtcDataStreamMessage) {
                 startSendingMessagesTest()
             } else {
                 sendRtcDataStreamMessage()
@@ -361,7 +363,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnSendAudioMetadata.setOnClickListener {
-            if (DemoContext.isEnableTestRtcAudioMetadata()) {
+            if (DemoContext.enableTestRtcAudioMetadata) {
                 startSendingMessagesTest()
             } else {
                 sendRtcAudioMetadata()
@@ -369,7 +371,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
 
         binding.btnSendRtmMessage.setOnClickListener {
-            if (DemoContext.isEnableTestRtmMessage()) {
+            if (DemoContext.enableTestRtmMessage) {
                 startSendingMessagesTest()
             } else {
                 sendRtmMessages()
@@ -391,15 +393,15 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         sendingJob = CoroutineScope(Dispatchers.Main).launch {
             var count = 0
             while (count < RTM_TEST_MAX_COUNT && isActive) {
-                if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+                if (DemoContext.enableTestRtcDataStreamMessage) {
                     binding.btnSendStreamMessage.isEnabled = false
                     sendRtcDataStreamMessage()
                 }
-                if (DemoContext.isEnableTestRtcAudioMetadata()) {
+                if (DemoContext.enableTestRtcAudioMetadata) {
                     binding.btnSendAudioMetadata.isEnabled = false
                     sendRtcAudioMetadata()
                 }
-                if (DemoContext.isEnableTestRtmMessage()) {
+                if (DemoContext.enableTestRtmMessage) {
                     binding.btnSendRtmMessage.isEnabled = false
                     sendRtmMessages()
                 }
@@ -411,13 +413,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         // Enable the button after the coroutine job is finished
         sendingJob?.invokeOnCompletion {
             runOnUiThread {
-                if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+                if (DemoContext.enableTestRtcDataStreamMessage) {
                     binding.btnSendStreamMessage.isEnabled = true
                 }
-                if (DemoContext.isEnableTestRtcAudioMetadata()) {
+                if (DemoContext.enableTestRtcAudioMetadata) {
                     binding.btnSendAudioMetadata.isEnabled = true
                 }
-                if (DemoContext.isEnableTestRtmMessage()) {
+                if (DemoContext.enableTestRtmMessage) {
                     binding.btnSendRtmMessage.isEnabled = true
                 }
             }
@@ -507,10 +509,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             if (mJoinSuccess) getText(R.string.leave) else getText(R.string.join)
 
         binding.btnEnableVideo.text =
-            if (DemoContext.isEnableVideo()) getText(R.string.disable_video) else getText(R.string.enable_video)
+            if (DemoContext.enableVideo) getText(R.string.disable_video) else getText(R.string.enable_video)
 
         binding.btnEnableAudio.text =
-            if (DemoContext.isEnableAudio()) getText(R.string.disable_audio) else getText(
+            if (DemoContext.enableAudio) getText(R.string.disable_audio) else getText(
                 R.string.enable_audio
             )
     }

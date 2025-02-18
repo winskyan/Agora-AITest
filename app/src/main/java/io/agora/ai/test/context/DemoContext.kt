@@ -2,123 +2,64 @@ package io.agora.ai.test.context
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import io.agora.ai.test.constants.Constants
 import io.agora.ai.test.model.Config
+import io.agora.ai.test.utils.MMKVUtils
 
 object DemoContext {
-    private var params: Array<String> = emptyArray()
-    private var audioProfile: Int = 0//Constants.AUDIO_PROFILE_DEFAULT
-    private var audioScenario: Int = 7 //Constants.AUDIO_SCENARIO_CHORUS
+    var params: Array<String>
+        get() = MMKVUtils.getStringSet(Constants.MMKV_KEY_PARAMS, emptySet())?.toTypedArray()
+            ?: emptyArray()
+        set(value) = MMKVUtils.putStringSet(Constants.MMKV_KEY_PARAMS, value.toSet())
 
-    private var enableAudio = false
-    private var enableVideo = false
-    private var enableRtm = true
-    private var enableStereoTest = false
-    private var enableSaveAudio = false
+    var audioProfile: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_AUDIO_PROFILE, 0)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_PROFILE, value)
 
-    private var enableTestRtcDataStreamMessage = true
-    private var enableTestRtmMessage = true
-    private var enableTestRtcAudioMetadata = false
+    var audioScenario: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_AUDIO_SCENARIO, 7)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_SCENARIO, value)
 
-    fun clearParams() {
-        params = emptyArray()
-    }
+    var enableAudio: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, value)
 
-    fun addParams(params: String) {
-        DemoContext.params += params
-    }
+    var enableVideo: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_VIDEO, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_VIDEO, value)
 
-    fun removeParams(param: String) {
-        params = params.filter { it != param }.toTypedArray()
-    }
+    var enableRtm: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_RTM, true)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_RTM, value)
 
-    fun getParams(): Array<String> {
-        return params
-    }
+    var enableStereoTest: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_STEREO_TEST, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_STEREO_TEST, value)
 
-    fun setAudioProfile(audioProfile: Int) {
-        DemoContext.audioProfile = audioProfile
-    }
+    var enableSaveAudio: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_SAVE_AUDIO, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_SAVE_AUDIO, value)
 
-    fun getAudioProfile(): Int {
-        return audioProfile
-    }
+    var enableTestRtcDataStreamMessage: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE, true)
+        set(value) = MMKVUtils.putBoolean(
+            Constants.MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE,
+            value
+        )
 
-    fun setAudioScenario(audioScenario: Int) {
-        DemoContext.audioScenario = audioScenario
-    }
+    var enableTestRtmMessage: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTM_MESSAGE, true)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTM_MESSAGE, value)
 
-    fun getAudioScenario(): Int {
-        return audioScenario
-    }
+    var enableTestRtcAudioMetadata: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA, value)
+
 
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type
         return gson.fromJson(jsonString, configType)
-    }
-
-    fun setEnableAudio(enableAudio: Boolean) {
-        DemoContext.enableAudio = enableAudio
-    }
-
-    fun isEnableAudio(): Boolean {
-        return enableAudio
-    }
-
-    fun setEnableVideo(enableVideo: Boolean) {
-        DemoContext.enableVideo = enableVideo
-    }
-
-    fun isEnableVideo(): Boolean {
-        return enableVideo
-    }
-
-    fun setEnableRtm(enableRtm: Boolean) {
-        DemoContext.enableRtm = enableRtm
-    }
-
-    fun isEnableRtm(): Boolean {
-        return enableRtm
-    }
-
-    fun setEnableStereoTest(enableStereoTest: Boolean) {
-        DemoContext.enableStereoTest = enableStereoTest
-    }
-
-    fun isEnableStereoTest(): Boolean {
-        return enableStereoTest
-    }
-
-    fun setEnableSaveAudio(enableSaveAudio: Boolean) {
-        DemoContext.enableSaveAudio = enableSaveAudio
-    }
-
-    fun isEnableSaveAudio(): Boolean {
-        return enableSaveAudio
-    }
-
-    fun setEnableTestRtcDataStreamMessage(enableTestRtcDataStreamMessage: Boolean) {
-        DemoContext.enableTestRtcDataStreamMessage = enableTestRtcDataStreamMessage
-    }
-
-    fun isEnableTestRtcDataStreamMessage(): Boolean {
-        return enableTestRtcDataStreamMessage
-    }
-
-    fun setEnableTestRtmMessage(enableTestRtmMessage: Boolean) {
-        DemoContext.enableTestRtmMessage = enableTestRtmMessage
-    }
-
-    fun isEnableTestRtmMessage(): Boolean {
-        return enableTestRtmMessage
-    }
-
-    fun setEnableTestRtcAudioMetadata(enableTestRtcAudioMetadata: Boolean) {
-        DemoContext.enableTestRtcAudioMetadata = enableTestRtcAudioMetadata
-    }
-
-    fun isEnableTestRtcAudioMetadata(): Boolean {
-        return enableTestRtcAudioMetadata
     }
 
 }

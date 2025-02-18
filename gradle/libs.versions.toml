@@ -15,6 +15,7 @@ agora-rtm = "2.2.2"
 commons-codec = "1.16.0"
 maas = "0.1"
 gson = "2.8.8"
+mmkv = "1.2.13"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,7 +31,7 @@ agora-authentication = { group = "io.agora", name = "authentication", version.re
 agora-rtc = { group = "io.agora.rtc", name = "agora-special-full", version.ref = "agora-rtc" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 agora-rtm = { group = "io.agora", name = "agora-rtm", version.ref = "agora-rtm" }
-
+mmkv = { group = "com.tencent", name = "mmkv-static", version.ref = "mmkv" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
