@@ -11,18 +11,25 @@ object KeyCenter {
 
     val APP_ID: String = BuildConfig.APP_ID
     private var USER_RTC_UID = -1
+    private var USER_RTM_UID = -1
 
     private val randomUserUid: Int
         get() {
-            USER_RTC_UID = Random().nextInt(USER_MAX_UID)
-            return USER_RTC_UID
+            return Random().nextInt(USER_MAX_UID)
         }
 
-    fun getUid(): Int {
+    fun getRtcUid(): Int {
         if (USER_RTC_UID == -1) {
             USER_RTC_UID = randomUserUid
         }
         return USER_RTC_UID
+    }
+
+    fun getRtmUid(): Int {
+        if (USER_RTM_UID == -1) {
+            USER_RTM_UID = randomUserUid
+        }
+        return USER_RTM_UID
     }
 
     fun getRtcToken(channelId: String?, uid: Int): String {

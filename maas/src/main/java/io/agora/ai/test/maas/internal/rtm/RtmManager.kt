@@ -36,14 +36,14 @@ object RtmManager {
     private var mRtmToken = ""
 
     fun initialize(configuration: MaaSEngineConfiguration) {
-        Log.d(MaaSConstants.TAG, "rtm initialize")
+        Log.d(MaaSConstants.TAG, "rtm initialize rtmUserId: ${configuration.rtmUserId}")
         mLoginSuccess = false
         mRtmToken = configuration.rtmToken.ifEmpty {
             configuration.appId
         }
         mEventCallback = configuration.eventHandler
         val rtmConfig =
-            RtmConfig.Builder(configuration.appId, configuration.userId.toString())
+            RtmConfig.Builder(configuration.appId, configuration.rtmUserId.toString())
                 .eventListener(object : RtmEventListener {
                     override fun onMessageEvent(event: MessageEvent?) {
                         super.onMessageEvent(event)
@@ -62,7 +62,7 @@ object RtmManager {
                                 rtmMessage,
                                 event.publisherId,
                                 event.customType,
-                                0//event.timestamp
+                                event.timestamp
                             )
                         } else if (event?.channelType == RtmConstants.RtmChannelType.STREAM) {
                             var rtmMessage: String = ""
@@ -78,7 +78,7 @@ object RtmManager {
                                 rtmMessage,
                                 event.publisherId,
                                 event.customType,
-                                0//event.timestamp
+                                event.timestamp
                             )
                         }
                     }
@@ -91,9 +91,7 @@ object RtmManager {
                     override fun onTopicEvent(event: TopicEvent?) {
                         super.onTopicEvent(event)
                         Log.d(MaaSConstants.TAG, "Rtm onTopicEvent: $event")
-                        if (event?.type == RtmConstants.RtmTopicEventType.REMOTE_JOIN ||
-                            event?.type == RtmConstants.RtmTopicEventType.SNAPSHOT
-                        ) {
+                        if (event?.type == RtmConstants.RtmTopicEventType.REMOTE_JOIN) {
                             CoroutineScope(Dispatchers.Main).launch {
                                 subscribeTopic(mRoomName)
                             }

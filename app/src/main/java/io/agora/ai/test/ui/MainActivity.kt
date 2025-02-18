@@ -161,10 +161,11 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.enableConsoleLog = true
         configuration.enableSaveLogToFile = true
         configuration.appId = BuildConfig.APP_ID
-        configuration.userId = KeyCenter.getUid()
-        configuration.rtcToken = KeyCenter.getRtcToken(mChannelName, KeyCenter.getUid())
+        configuration.userId = KeyCenter.getRtcUid()
+        configuration.rtmUserId = KeyCenter.getRtmUid()
+        configuration.rtcToken = KeyCenter.getRtcToken(mChannelName, KeyCenter.getRtcUid())
         configuration.rtmToken =
-            if (DemoContext.isEnableRtm()) KeyCenter.getRtmToken2(KeyCenter.getUid()) else ""
+            if (DemoContext.isEnableRtm()) KeyCenter.getRtmToken2(KeyCenter.getRtmUid()) else ""
         configuration.enableMultiTurnShortTermMemory = true
         configuration.userName = "test"
         configuration.agentVoiceName = "xiaoyan"
@@ -237,7 +238,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     channelName = mChannelName
                 }
                 mHistoryFileName =
-                    "history-${channelName}-${KeyCenter.getUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
+                    "history-${channelName}-${KeyCenter.getRtcUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
                 initWriter()
                 initEngine()
                 mMaaSEngine?.joinChannel(
@@ -493,7 +494,6 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     override fun onUserOffline(uid: Int, reason: Int) {
-        Log.d(TAG, "onUserOffline uid:$uid reason:$reason")
     }
 
     override fun onAudioVolumeIndication(speakers: ArrayList<AudioVolumeInfo>, totalVolume: Int) {

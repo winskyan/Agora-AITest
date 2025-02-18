@@ -12,6 +12,7 @@ class MaaSEngineConfiguration(
     var enableSaveLogToFile: Boolean,
     var appId: String,
     var userId: Int,
+    var rtmUserId: Int,
     var rtcToken: String,
     var rtmToken: String,
     var enableMultiTurnShortTermMemory: Boolean,
@@ -36,6 +37,7 @@ class MaaSEngineConfiguration(
         rtcToken = "",
         rtmToken = "",
         userId = 0,
+        rtmUserId = 0,
         enableMultiTurnShortTermMemory = false,
         userName = "",
         input = SceneMode("zh-CN", 16000, 1, 16),
@@ -51,6 +53,6 @@ class MaaSEngineConfiguration(
     }
 
     override fun toString(): String {
-        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtcToken='$rtcToken', rtmToken='$rtmToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario , enableRtm=$enableRtm)"
+        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtmUserId=${rtmUserId},rtcToken='$rtcToken', rtmToken='$rtmToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario , enableRtm=$enableRtm)"
     }
 }
