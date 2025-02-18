@@ -132,7 +132,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
 
-
+            Log.d(
+                MaaSConstants.TAG,
+                "initRtcEngine audio profile:${configuration.audioProfile} audio scenario:${configuration.audioScenario}"
+            )
             mRtcEngine?.setAudioProfile(configuration.audioProfile)
             mRtcEngine?.setAudioScenario(configuration.audioScenario)
 

@@ -56,6 +56,23 @@ object SettingsDialog {
                         DemoContext.setEnableSaveAudio(isChecked)
                     }
 
+                    binding.enableRtcDataStreamTestCb.isChecked =
+                        DemoContext.isEnableTestRtcDataStreamMessage()
+                    binding.enableRtcDataStreamTestCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableTestRtcDataStreamMessage(isChecked)
+                    }
+
+                    binding.enableRtcAudioMetaDataTestCb.isChecked =
+                        DemoContext.isEnableTestRtcAudioMetadata()
+                    binding.enableRtcAudioMetaDataTestCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableTestRtcAudioMetadata(isChecked)
+                    }
+
+                    binding.enableRtmMessageTestCb.isChecked = DemoContext.isEnableTestRtmMessage()
+                    binding.enableRtmMessageTestCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.setEnableTestRtmMessage(isChecked)
+                    }
+
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
                     createCheckboxes(constraintLayout, config, context)
 

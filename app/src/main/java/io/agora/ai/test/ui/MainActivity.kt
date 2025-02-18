@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.View
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
@@ -32,7 +31,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import java.io.BufferedWriter
@@ -58,15 +56,23 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var mChannelName = "testAga"
     private var mJoinSuccess = false
 
-    private var mSendAudioMetadataTime = 0L
-    private var mSendStreamMessageTime = 0L
-    private var mSendRtmMessageTime = 0L
-    private var mSendRtmStreamMessageTime = 0L
+    private var mSendRtcAudioMetadataTime = 0L
+    private var mSendRtcAudioMetadata = ""
+    private var mReceiveRtcAudioMetadataTotalTime = 0L
+    private var mReceiveRtcAudioMetadataTotalCount = 0
 
+    private var mSendRtcDataStreamMessageTime = 0L
+    private var mSendRtcDataStreamMessage = ""
+    private var mReceiveRtcDataStreamMessageTotalTime = 0L
+    private var mReceiveRtcDataStreamMessageTotalCount = 0
+
+    private var mSendRtmMessageTime = 0L
     private var mSendRtmMessage = ""
-    private var mSendRtmStreamMessage = ""
     private var mReceiveRtmMessageTotalTime = 0L
     private var mReceiveRtmMessageTotalCount = 0
+
+    private var mSendRtmStreamMessageTime = 0L
+    private var mSendRtmStreamMessage = ""
     private var mReceiveRtmStreamMessageTotalTime = 0L
     private var mReceiveRtmStreamMessageTotalCount = 0
 
@@ -150,7 +156,25 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     private fun initData() {
+        mSendRtcAudioMetadataTime = 0L
+        mSendRtcAudioMetadata = ""
+        mReceiveRtcAudioMetadataTotalTime = 0L
+        mReceiveRtcAudioMetadataTotalCount = 0
 
+        mSendRtcDataStreamMessageTime = 0L
+        mSendRtcDataStreamMessage = ""
+        mReceiveRtcDataStreamMessageTotalTime = 0L
+        mReceiveRtcDataStreamMessageTotalCount = 0
+
+        mSendRtmMessageTime = 0L
+        mSendRtmMessage = ""
+        mReceiveRtmMessageTotalTime = 0L
+        mReceiveRtmMessageTotalCount = 0
+
+        mSendRtmStreamMessageTime = 0L
+        mSendRtmStreamMessage = ""
+        mReceiveRtmStreamMessageTotalTime = 0L
+        mReceiveRtmStreamMessageTotalCount = 0
     }
 
     private fun initEngine() {
@@ -220,7 +244,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
-                stopSendingRtmMessages()
+                stopSendingMessagesTest()
                 if (DemoContext.isEnableAudio()) {
                     mMaaSEngine?.disableAudio()
                     DemoContext.setEnableAudio(false)
@@ -233,6 +257,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 MaaSEngine.destroy()
                 closeWriter()
             } else {
+                initData()
                 var channelName = binding.etChannelName.text.toString()
                 if (channelName.isEmpty()) {
                     channelName = mChannelName
@@ -327,26 +352,28 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             mMaaSEngine?.clearVideoWatermarks()
         }
 
-
-
         binding.btnSendStreamMessage.setOnClickListener {
-            val streamMessage = "streamMessage:" + System.currentTimeMillis()
-            mMaaSEngine?.sendText(streamMessage)
-            mSendStreamMessageTime = System.currentTimeMillis()
-            updateHistoryUI("SendStreamMessage:$streamMessage")
+            if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+                startSendingMessagesTest()
+            } else {
+                sendRtcDataStreamMessage()
+            }
         }
 
         binding.btnSendAudioMetadata.setOnClickListener {
-            val metadata =
-                "metadata:" + System.currentTimeMillis()
-            mMaaSEngine?.sendAudioMetadata(metadata.toByteArray(Charsets.UTF_8))
-            mSendAudioMetadataTime = System.currentTimeMillis()
-            updateHistoryUI("SendAudioMetadata:$metadata")
+            if (DemoContext.isEnableTestRtcAudioMetadata()) {
+                startSendingMessagesTest()
+            } else {
+                sendRtcAudioMetadata()
+            }
         }
 
         binding.btnSendRtmMessage.setOnClickListener {
-            binding.btnSendRtmMessage.isEnabled = false
-            startSendingRtmMessages()
+            if (DemoContext.isEnableTestRtmMessage()) {
+                startSendingMessagesTest()
+            } else {
+                sendRtmMessages()
+            }
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
@@ -356,42 +383,70 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         }
     }
 
-    private fun startSendingRtmMessages() {
+    private fun startSendingMessagesTest() {
         // Cancel any existing coroutine job to avoid multiple instances running
         sendingJob?.cancel()
-        mSendRtmMessageTime = 0L
-        mSendRtmStreamMessageTime = 0L
-        mReceiveRtmMessageTotalTime = 0L
-        mReceiveRtmMessageTotalCount = 0
-        mReceiveRtmStreamMessageTotalTime = 0L
-        mReceiveRtmStreamMessageTotalCount = 0
-
 
         // Launch a new coroutine to send messages every second
         sendingJob = CoroutineScope(Dispatchers.Main).launch {
             var count = 0
             while (count < RTM_TEST_MAX_COUNT && isActive) {
-                sendRtmMessages()
+                if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+                    binding.btnSendStreamMessage.isEnabled = false
+                    sendRtcDataStreamMessage()
+                }
+                if (DemoContext.isEnableTestRtcAudioMetadata()) {
+                    binding.btnSendAudioMetadata.isEnabled = false
+                    sendRtcAudioMetadata()
+                }
+                if (DemoContext.isEnableTestRtmMessage()) {
+                    binding.btnSendRtmMessage.isEnabled = false
+                    sendRtmMessages()
+                }
                 count++
-                delay(1000)
+                delay(1 * 1000)
             }
         }
 
         // Enable the button after the coroutine job is finished
         sendingJob?.invokeOnCompletion {
             runOnUiThread {
-                binding.btnSendRtmMessage.isEnabled = true
+                if (DemoContext.isEnableTestRtcDataStreamMessage()) {
+                    binding.btnSendStreamMessage.isEnabled = true
+                }
+                if (DemoContext.isEnableTestRtcAudioMetadata()) {
+                    binding.btnSendAudioMetadata.isEnabled = true
+                }
+                if (DemoContext.isEnableTestRtmMessage()) {
+                    binding.btnSendRtmMessage.isEnabled = true
+                }
             }
         }
     }
 
-    private fun stopSendingRtmMessages() {
+    private fun stopSendingMessagesTest() {
         if (sendingJob?.isActive == true) {
             sendingJob?.cancel()
         }
     }
 
-    private suspend fun sendRtmMessages() {
+    private fun sendRtcDataStreamMessage() {
+        val currentTime = System.currentTimeMillis()
+        mSendRtcDataStreamMessage = "RtcDataStreamMessage:$currentTime"
+        mMaaSEngine?.sendText(mSendRtcDataStreamMessage)
+        mSendRtcDataStreamMessageTime = currentTime
+        updateHistoryUI("SendRtcDataStreamMessage:$mSendRtcDataStreamMessage")
+    }
+
+    private fun sendRtcAudioMetadata() {
+        val currentTime = System.currentTimeMillis()
+        mSendRtcAudioMetadata = "RtcAudioMetadata:$currentTime"
+        mMaaSEngine?.sendAudioMetadata(mSendRtcAudioMetadata.toByteArray(Charsets.UTF_8))
+        mSendRtcAudioMetadataTime = currentTime
+        updateHistoryUI("SendRtcAudioMetadata:$mSendRtcAudioMetadata")
+    }
+
+    private fun sendRtmMessages() {
         mSendRtmMessageTime = System.currentTimeMillis()
         mSendRtmMessage = "rtmMessage:$mSendRtmMessageTime"
         var ret = mMaaSEngine?.sendRtmMessage(
@@ -399,10 +454,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             MaaSConstants.RtmChannelType.MESSAGE
         )
         if (ret != 0) {
-            Log.d(TAG, "sendRtmMessage failed")
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@MainActivity, "sendRtmMessage failed", Toast.LENGTH_LONG).show()
-            }
+            Log.e(TAG, "sendRtmMessage failed")
             return
         }
         updateHistoryUI("SendRtmMessage:$mSendRtmMessage")
@@ -414,11 +466,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             MaaSConstants.RtmChannelType.STREAM
         )
         if (ret != 0) {
-            Log.d(TAG, "sendRtmStreamMessage failed")
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@MainActivity, "sendRtmStreamMessage failed", Toast.LENGTH_LONG)
-                    .show()
-            }
+            Log.e(TAG, "sendRtmStreamMessage failed")
             return
         }
         updateHistoryUI("SendRtmStreamMessage:$mSendRtmStreamMessage")
@@ -453,7 +501,6 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnClearWatermark.isEnabled = mJoinSuccess
         binding.btnSendStreamMessage.isEnabled = mJoinSuccess
         binding.btnSendAudioMetadata.isEnabled = mJoinSuccess
-        binding.btnClear.isEnabled = mJoinSuccess
         binding.btnSendRtmMessage.isEnabled = mJoinSuccess
 
         binding.btnJoin.text =
@@ -502,11 +549,17 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     override fun onStreamMessage(uid: Int, data: ByteArray?) {
         Log.d(TAG, "onStreamMessage uid:$uid data:${String(data!!, Charsets.UTF_8)}")
-        if (0L != mSendStreamMessageTime) {
-            val diff = System.currentTimeMillis() - mSendStreamMessageTime
-            updateHistoryUI("ReceiveStreamMessage:${String(data)} diff:$diff")
+        if (0L != mSendRtcDataStreamMessageTime && data.contentEquals(
+                mSendRtcDataStreamMessage.toByteArray(Charsets.UTF_8)
+            )
+        ) {
+            val currentTime = System.currentTimeMillis()
+            val diff = System.currentTimeMillis() - mSendRtcDataStreamMessageTime
+            mReceiveRtcDataStreamMessageTotalCount++
+            mReceiveRtcDataStreamMessageTotalTime += diff
+            updateHistoryUI("${currentTime}:ReceiveRtcDataStreamMessage:${String(data)} diff:$diff total:$mReceiveRtcDataStreamMessageTotalCount avg:${mReceiveRtcDataStreamMessageTotalTime / mReceiveRtcDataStreamMessageTotalCount}")
         } else {
-            updateHistoryUI("ReceiveStreamMessage:${String(data)}")
+            updateHistoryUI("ReceiveRtcDataStreamMessage:${String(data)}")
         }
     }
 
@@ -515,11 +568,19 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             TAG,
             "onAudioMetadataReceived uid:$uid metadata:${String(metadata!!, Charsets.UTF_8)}"
         )
-        if (0L != mSendAudioMetadataTime) {
-            val diff = System.currentTimeMillis() - mSendAudioMetadataTime
-            updateHistoryUI("ReceiveAudioMetadata:${String(metadata)} diff:$diff")
+        if (0L != mSendRtcAudioMetadataTime && metadata.contentEquals(
+                mSendRtcAudioMetadata.toByteArray(
+                    Charsets.UTF_8
+                )
+            )
+        ) {
+            val currentTime = System.currentTimeMillis()
+            val diff = System.currentTimeMillis() - currentTime
+            mReceiveRtcAudioMetadataTotalCount++
+            mReceiveRtcAudioMetadataTotalTime += diff
+            updateHistoryUI("${currentTime}:ReceiveRtcAudioMetadata:${String(metadata)} diff:$diff total:$mReceiveRtcAudioMetadataTotalCount avg:${mReceiveRtcAudioMetadataTotalTime / mReceiveRtcAudioMetadataTotalCount}")
         } else {
-            updateHistoryUI("ReceiveAudioMetadata:${String(metadata)}")
+            updateHistoryUI("ReceiveRtcAudioMetadata:${String(metadata)}")
         }
     }
 

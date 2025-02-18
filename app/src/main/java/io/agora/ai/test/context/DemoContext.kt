@@ -15,6 +15,10 @@ object DemoContext {
     private var enableStereoTest = false
     private var enableSaveAudio = false
 
+    private var enableTestRtcDataStreamMessage = true
+    private var enableTestRtmMessage = true
+    private var enableTestRtcAudioMetadata = false
+
     fun clearParams() {
         params = emptyArray()
     }
@@ -92,4 +96,29 @@ object DemoContext {
     fun isEnableSaveAudio(): Boolean {
         return enableSaveAudio
     }
+
+    fun setEnableTestRtcDataStreamMessage(enableTestRtcDataStreamMessage: Boolean) {
+        DemoContext.enableTestRtcDataStreamMessage = enableTestRtcDataStreamMessage
+    }
+
+    fun isEnableTestRtcDataStreamMessage(): Boolean {
+        return enableTestRtcDataStreamMessage
+    }
+
+    fun setEnableTestRtmMessage(enableTestRtmMessage: Boolean) {
+        DemoContext.enableTestRtmMessage = enableTestRtmMessage
+    }
+
+    fun isEnableTestRtmMessage(): Boolean {
+        return enableTestRtmMessage
+    }
+
+    fun setEnableTestRtcAudioMetadata(enableTestRtcAudioMetadata: Boolean) {
+        DemoContext.enableTestRtcAudioMetadata = enableTestRtcAudioMetadata
+    }
+
+    fun isEnableTestRtcAudioMetadata(): Boolean {
+        return enableTestRtcAudioMetadata
+    }
+
 }
