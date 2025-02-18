@@ -25,6 +25,7 @@ import io.agora.ai.test.maas.model.VadConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.ai.test.ui.dialog.SettingsDialog
 import io.agora.ai.test.utils.KeyCenter
+import io.agora.ai.test.utils.Utils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,10 +35,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
@@ -70,6 +73,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var sendingJob: Job? = null
 
     private var mHistoryFileName = ""
+    private val logExecutor = Executors.newSingleThreadExecutor()
+    private lateinit var bufferedWriter: BufferedWriter
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,10 +86,24 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         initView()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        stopSendingRtmMessages()
+    private fun initWriter() {
+        val cacheDir = externalCacheDir
+        val logFile = File(cacheDir, mHistoryFileName)
+        try {
+            bufferedWriter = BufferedWriter(FileWriter(logFile, true))
+        } catch (e: IOException) {
+            Log.e(TAG, "Error creating BufferedWriter", e)
+        }
     }
+
+    private fun closeWriter() {
+        try {
+            bufferedWriter.close()
+        } catch (e: IOException) {
+            Log.e(TAG, "Error closing BufferedWriter", e)
+        }
+    }
+
 
     private fun checkPermissions() {
         val permissions =
@@ -211,12 +230,15 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 }
                 mMaaSEngine?.leaveChannel()
                 MaaSEngine.destroy()
+                closeWriter()
             } else {
                 var channelName = binding.etChannelName.text.toString()
                 if (channelName.isEmpty()) {
                     channelName = mChannelName
                 }
-                mHistoryFileName = "history_${channelName}_${System.currentTimeMillis()}.txt"
+                mHistoryFileName =
+                    "history-${channelName}-${KeyCenter.getUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
+                initWriter()
                 initEngine()
                 mMaaSEngine?.joinChannel(
                     channelName,
@@ -578,14 +600,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     private fun writeMessageToFile(message: String) {
-        val cacheDir = externalCacheDir
-        val logFile = File(cacheDir, mHistoryFileName)
-        try {
-            val writer = FileWriter(logFile, true)
-            writer.append(message).append("\n")
-            writer.close()
-        } catch (e: IOException) {
-            Log.e(TAG, "Error writing message to file", e)
+        logExecutor.execute {
+            try {
+                bufferedWriter.append(message).append("\n")
+                bufferedWriter.flush()
+            } catch (e: IOException) {
+                Log.e(TAG, "Error writing message to file", e)
+            }
         }
     }
 }

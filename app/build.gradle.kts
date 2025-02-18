@@ -1,3 +1,5 @@
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Properties
 
 plugins {
@@ -41,6 +43,26 @@ android {
             )
         }
     }
+
+    signingConfigs {
+        create("release") {
+            keyAlias = "key0"
+            keyPassword = "123456"
+            storeFile = file("./keystore/testkey.jks")
+            storePassword = "123456"
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val now = Date()
+            val sdf = SimpleDateFormat("yyyyMMdd_HHmmss")
+            val formatTime = sdf.format(now)
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+                "${project.rootProject.name}-${defaultConfig.versionName}-${buildType.name}-$formatTime.apk"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -57,6 +79,7 @@ android {
         buildConfig = true
     }
 }
+
 
 dependencies {
     implementation(libs.androidx.core.ktx)
