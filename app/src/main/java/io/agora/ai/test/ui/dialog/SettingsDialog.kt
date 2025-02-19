@@ -112,7 +112,8 @@ object SettingsDialog {
                             if (isChecked) {
                                 DemoContext.params += param
                             } else {
-                                DemoContext.params.filter { it != param }.toTypedArray()
+                                DemoContext.params =
+                                    DemoContext.params.filter { it != param }.toTypedArray()
                             }
                         }
                     }
