@@ -14,6 +14,7 @@ import io.agora.ai.test.R
 import io.agora.ai.test.constants.Constants
 import io.agora.ai.test.context.DemoContext
 import io.agora.ai.test.databinding.DialogSettingsBinding
+import io.agora.ai.test.maas.MaaSConstants
 import io.agora.ai.test.model.Config
 import io.agora.ai.test.utils.Utils
 
@@ -36,6 +37,24 @@ object SettingsDialog {
                 override fun initPopupContent() {
                     super.initPopupContent()
                     val binding = DialogSettingsBinding.bind(popupImplView)
+
+                    if (DemoContext.clientRoleType == MaaSConstants.CLIENT_ROLE_BROADCASTER) {
+                        binding.clientRoleTypeBroadcasterRb.isChecked = true
+                    } else {
+                        binding.clientRoleTypeAudienceRb.isChecked = true
+                    }
+
+                    binding.clientRoleTypeBroadcasterRb.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) {
+                            DemoContext.clientRoleType = MaaSConstants.CLIENT_ROLE_BROADCASTER
+                        }
+                    }
+
+                    binding.clientRoleTypeAudienceRb.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) {
+                            DemoContext.clientRoleType = MaaSConstants.CLIENT_ROLE_AUDIENCE
+                        }
+                    }
 
                     val config =
                         DemoContext.parseConfigJson(Utils.readAssetContent(context, "config.json"))

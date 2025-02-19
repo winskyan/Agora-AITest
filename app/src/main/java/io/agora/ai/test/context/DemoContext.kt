@@ -3,6 +3,7 @@ package io.agora.ai.test.context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import io.agora.ai.test.constants.Constants
+import io.agora.ai.test.maas.MaaSConstants
 import io.agora.ai.test.model.Config
 import io.agora.ai.test.utils.MMKVUtils
 
@@ -55,6 +56,12 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA, value)
 
+    var clientRoleType: Int
+        get() = MMKVUtils.getInt(
+            Constants.MMKV_KEY_CLIENT_ROLE_TYPE,
+            MaaSConstants.CLIENT_ROLE_BROADCASTER
+        )
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_CLIENT_ROLE_TYPE, value)
 
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()

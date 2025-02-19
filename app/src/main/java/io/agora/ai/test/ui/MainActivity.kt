@@ -270,7 +270,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 initEngine()
                 mMaaSEngine?.joinChannel(
                     channelName,
-                    MaaSConstants.CLIENT_ROLE_BROADCASTER,
+                    DemoContext.clientRoleType,
                     registerRecordingAudio = DemoContext.enableStereoTest,
                     registerPlaybackAudio = DemoContext.enableSaveAudio
                 )
@@ -517,16 +517,24 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             )
     }
 
+    private fun updateToolbarTitle(title: String) {
+        binding.toolbarTitle.text = title
+    }
+
 
     override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
         mJoinSuccess = true
-        runOnUiThread { updateUI() }
+        runOnUiThread {
+            updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid)")
+            updateUI()
+        }
     }
 
     override fun onLeaveChannelSuccess() {
         Log.d(TAG, "onLeaveChannelSuccess")
         mJoinSuccess = false
         runOnUiThread {
+            updateToolbarTitle(getString(R.string.app_name))
             updateUI()
 
         }

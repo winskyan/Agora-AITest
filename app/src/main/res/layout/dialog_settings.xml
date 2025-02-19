@@ -27,6 +27,38 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
 
+                <TextView
+                    android:id="@+id/client_role_type_tv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginTop="5dp"
+                    android:text="@string/client_role_type"
+                    android:textSize="15sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <RadioGroup
+                    android:id="@+id/client_role_type_rg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    app:layout_constraintStart_toEndOf="@id/client_role_type_tv"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <RadioButton
+                        android:id="@+id/client_role_type_broadcaster_rb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/client_role_type_broadcaster" />
+
+                    <RadioButton
+                        android:id="@+id/client_role_type_audience_rb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/client_role_type_audience" />
+                </RadioGroup>
+
                 <CheckBox
                     android:id="@+id/enable_rtm_cb"
                     android:layout_width="wrap_content"
@@ -34,7 +66,7 @@
                     android:text="@string/enable_rtm"
                     android:textSize="15sp"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintTop_toBottomOf="@id/client_role_type_tv" />
 
                 <CheckBox
                     android:id="@+id/enable_stereo_test_cb"
@@ -43,7 +75,7 @@
                     android:text="@string/enable_stereo_test"
                     android:textSize="15sp"
                     app:layout_constraintStart_toEndOf="@id/enable_rtm_cb"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintTop_toBottomOf="@id/client_role_type_tv" />
 
                 <CheckBox
                     android:id="@+id/enable_save_audio_cb"

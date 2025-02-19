@@ -15,5 +15,6 @@ object Constants {
     const val MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE = "enableTestRtcDataStreamMessage"
     const val MMKV_KEY_ENABLE_TEST_RTM_MESSAGE = "enableTestRtmMessage"
     const val MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA = "enableTestRtcAudioMetadata"
+    const val MMKV_KEY_CLIENT_ROLE_TYPE = "clientRoleType"
 
 }

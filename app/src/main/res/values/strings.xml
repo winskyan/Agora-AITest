@@ -25,5 +25,8 @@
     <string name="enable_rtc_data_stream_test">Enable Rtc Data Stream Loop Send Test</string>
     <string name="enable_rtc_audio_meta_data_test">Enable Rtc AudioMeta Loop Send Test</string>
     <string name="enable_rtm_message_test">Enable Rtm Message Loop Send Test</string>
+    <string name="client_role_type">Role</string>
+    <string name="client_role_type_broadcaster">Broadcaster</string>
+    <string name="client_role_type_audience">Audience</string>
 
 </resources>
