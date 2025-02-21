@@ -28,5 +28,8 @@
     <string name="client_role_type">Role</string>
     <string name="client_role_type_broadcaster">Broadcaster</string>
     <string name="client_role_type_audience">Audience</string>
+    <string name="app_id">APP ID</string>
+    <string name="app_certificate">APP CERTIFICATE</string>
+
 
 </resources>

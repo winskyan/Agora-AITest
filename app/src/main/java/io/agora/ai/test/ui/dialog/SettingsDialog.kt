@@ -27,6 +27,7 @@ object SettingsDialog {
         XPopup.Builder(context)
             .hasBlurBg(true)
             .autoDismiss(false)
+            .moveUpToKeyboard(false)
             .popupHeight((Utils.getScreenHeight(context) * 0.9).toInt())
             .asCustom(object : BottomPopupView(context) {
 
@@ -38,6 +39,19 @@ object SettingsDialog {
                     super.initPopupContent()
                     val binding = DialogSettingsBinding.bind(popupImplView)
 
+                    binding.appIdEt.setText(DemoContext.appId)
+                    binding.appIdEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.appId = binding.appIdEt.text.toString()
+                        }
+                    }
+
+                    binding.appCertificateEt.setText(DemoContext.appCertificate)
+                    binding.appCertificateEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.appCertificate = binding.appCertificateEt.text.toString()
+                        }
+                    }
                     if (DemoContext.clientRoleType == MaaSConstants.CLIENT_ROLE_BROADCASTER) {
                         binding.clientRoleTypeBroadcasterRb.isChecked = true
                     } else {

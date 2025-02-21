@@ -1,6 +1,7 @@
 package io.agora.ai.test.utils
 
 import io.agora.ai.test.BuildConfig
+import io.agora.ai.test.context.DemoContext
 import io.agora.media.RtcTokenBuilder
 import io.agora.rtm.RtmTokenBuilder
 import io.agora.rtm.RtmTokenBuilder2
@@ -33,12 +34,15 @@ object KeyCenter {
     }
 
     fun getRtcToken(channelId: String?, uid: Int): String {
-        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+        val appId = DemoContext.appId.ifEmpty { APP_ID }
+        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
+
+        if (appCertificate.isEmpty()) {
             return ""
         }
         return RtcTokenBuilder().buildTokenWithUid(
-            APP_ID,
-            BuildConfig.APP_CERTIFICATE,
+            appId,
+            appCertificate,
             channelId,
             uid,
             RtcTokenBuilder.Role.Role_Publisher,
@@ -47,13 +51,16 @@ object KeyCenter {
     }
 
     fun getRtmToken(uid: Int): String? {
-        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+        val appId = DemoContext.appId.ifEmpty { APP_ID }
+        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
+
+        if (appCertificate.isEmpty()) {
             return ""
         }
         return try {
             RtmTokenBuilder().buildToken(
-                APP_ID,
-                BuildConfig.APP_CERTIFICATE, uid.toString(),
+                appId,
+                appCertificate, uid.toString(),
                 RtmTokenBuilder.Role.Rtm_User,
                 0
             )
@@ -64,13 +71,15 @@ object KeyCenter {
     }
 
     fun getRtmToken2(uid: Int): String {
-        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
+        val appId = DemoContext.appId.ifEmpty { APP_ID }
+        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
+        if (appCertificate.isEmpty()) {
             return ""
         }
         return try {
             RtmTokenBuilder2().buildToken(
-                APP_ID,
-                BuildConfig.APP_CERTIFICATE, uid.toString(),
+                appId,
+                appCertificate, uid.toString(),
                 24 * 60 * 60
             )
         } catch (e: Exception) {

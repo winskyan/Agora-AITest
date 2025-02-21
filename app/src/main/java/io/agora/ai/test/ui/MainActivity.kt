@@ -184,7 +184,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         configuration.eventHandler = this
         configuration.enableConsoleLog = true
         configuration.enableSaveLogToFile = true
-        configuration.appId = BuildConfig.APP_ID
+        configuration.appId =
+            DemoContext.appId.ifEmpty { BuildConfig.APP_ID }
         configuration.userId = KeyCenter.getRtcUid()
         configuration.rtmUserId = KeyCenter.getRtmUid()
         configuration.rtcToken = KeyCenter.getRtcToken(mChannelName, KeyCenter.getRtcUid())

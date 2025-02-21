@@ -63,6 +63,14 @@ object DemoContext {
         )
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_CLIENT_ROLE_TYPE, value)
 
+    var appId: String
+        get() = MMKVUtils.getString(Constants.MMKV_KEY_APP_ID, "")
+        set(value) = MMKVUtils.putString(Constants.MMKV_KEY_APP_ID, value)
+
+    var appCertificate: String
+        get() = MMKVUtils.getString(Constants.MMKV_KEY_APP_CERTIFICATE, "")
+        set(value) = MMKVUtils.putString(Constants.MMKV_KEY_APP_CERTIFICATE, value)
+
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type
