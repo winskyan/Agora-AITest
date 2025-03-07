@@ -32,6 +32,11 @@ android {
             "APP_CERTIFICATE",
             "\"${properties.getProperty("APP_CERTIFICATE", "")}\""
         )
+        buildConfigField(
+            "String",
+            "RTC_TOKEN",
+            "\"${properties.getProperty("RTC_TOKEN", "")}\""
+        )
     }
 
     buildTypes {

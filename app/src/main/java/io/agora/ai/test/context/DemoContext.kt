@@ -67,6 +67,10 @@ object DemoContext {
         get() = MMKVUtils.getString(Constants.MMKV_KEY_APP_ID, "")
         set(value) = MMKVUtils.putString(Constants.MMKV_KEY_APP_ID, value)
 
+    var rtcToken: String
+        get() = MMKVUtils.getString(Constants.MMKV_KEY_RTC_TOKEN, "")
+        set(value) = MMKVUtils.putString(Constants.MMKV_KEY_RTC_TOKEN, value)
+
     var appCertificate: String
         get() = MMKVUtils.getString(Constants.MMKV_KEY_APP_CERTIFICATE, "")
         set(value) = MMKVUtils.putString(Constants.MMKV_KEY_APP_CERTIFICATE, value)

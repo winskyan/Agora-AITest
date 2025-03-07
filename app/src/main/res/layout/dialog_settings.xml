@@ -38,6 +38,16 @@
                     app:layout_constraintTop_toTopOf="parent" />
 
                 <EditText
+                    android:id="@+id/rtc_token_et"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/rtc_token"
+                    android:inputType="text"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/app_id_et" />
+
+                <EditText
                     android:id="@+id/app_certificate_et"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -45,7 +55,7 @@
                     android:inputType="text"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/app_id_et" />
+                    app:layout_constraintTop_toBottomOf="@id/rtc_token_et" />
 
                 <TextView
                     android:id="@+id/client_role_type_tv"

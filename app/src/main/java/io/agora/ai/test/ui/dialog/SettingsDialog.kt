@@ -16,6 +16,7 @@ import io.agora.ai.test.context.DemoContext
 import io.agora.ai.test.databinding.DialogSettingsBinding
 import io.agora.ai.test.maas.MaaSConstants
 import io.agora.ai.test.model.Config
+import io.agora.ai.test.utils.KeyCenter
 import io.agora.ai.test.utils.Utils
 
 
@@ -39,6 +40,9 @@ object SettingsDialog {
                     super.initPopupContent()
                     val binding = DialogSettingsBinding.bind(popupImplView)
 
+                    if (DemoContext.appId.isEmpty() && KeyCenter.APP_ID.isNotEmpty()) {
+                        DemoContext.appId = KeyCenter.APP_ID
+                    }
                     binding.appIdEt.setText(DemoContext.appId)
                     binding.appIdEt.setOnFocusChangeListener { _, hasFocus ->
                         if (!hasFocus) {
@@ -46,6 +50,19 @@ object SettingsDialog {
                         }
                     }
 
+                    if (DemoContext.rtcToken.isEmpty() && KeyCenter.RTC_TOKEN.isNotEmpty()) {
+                        DemoContext.rtcToken = KeyCenter.RTC_TOKEN
+                    }
+                    binding.rtcTokenEt.setText(DemoContext.rtcToken)
+                    binding.rtcTokenEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.rtcToken = binding.rtcTokenEt.text.toString()
+                        }
+                    }
+
+                    if (DemoContext.appCertificate.isEmpty() && KeyCenter.APP_CERTIFICATE.isNotEmpty()) {
+                        DemoContext.appCertificate = KeyCenter.APP_CERTIFICATE
+                    }
                     binding.appCertificateEt.setText(DemoContext.appCertificate)
                     binding.appCertificateEt.setOnFocusChangeListener { _, hasFocus ->
                         if (!hasFocus) {

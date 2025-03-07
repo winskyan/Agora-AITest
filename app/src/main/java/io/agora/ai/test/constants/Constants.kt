@@ -17,6 +17,7 @@ object Constants {
     const val MMKV_KEY_ENABLE_TEST_RTC_AUDIO_METADATA = "enableTestRtcAudioMetadata"
     const val MMKV_KEY_CLIENT_ROLE_TYPE = "clientRoleType"
     const val MMKV_KEY_APP_ID = "appId"
+    const val MMKV_KEY_RTC_TOKEN = "rtcToken"
     const val MMKV_KEY_APP_CERTIFICATE = "appCertificate"
 
 }
