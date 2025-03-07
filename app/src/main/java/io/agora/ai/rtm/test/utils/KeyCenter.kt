@@ -1,7 +1,6 @@
-package io.agora.ai.test.utils
+package io.agora.ai.rtm.test.utils
 
-import io.agora.ai.test.BuildConfig
-import io.agora.ai.test.context.DemoContext
+import io.agora.ai.rtm.test.BuildConfig
 import io.agora.media.RtcTokenBuilder
 import io.agora.rtm.RtmTokenBuilder
 import io.agora.rtm.RtmTokenBuilder2
@@ -39,15 +38,13 @@ object KeyCenter {
         if (BuildConfig.RTC_TOKEN.isNotEmpty()) {
             return BuildConfig.RTC_TOKEN
         }
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
 
-        if (appCertificate.isEmpty()) {
+        if (BuildConfig.APP_CERTIFICATE.isEmpty()) {
             return ""
         }
         return RtcTokenBuilder().buildTokenWithUid(
-            appId,
-            appCertificate,
+            BuildConfig.APP_ID,
+            BuildConfig.APP_CERTIFICATE,
             channelId,
             uid,
             RtcTokenBuilder.Role.Role_Publisher,
@@ -56,15 +53,14 @@ object KeyCenter {
     }
 
     fun getRtmToken(uid: Int): String? {
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
+        val appCertificate = BuildConfig.APP_CERTIFICATE
 
         if (appCertificate.isEmpty()) {
             return ""
         }
         return try {
             RtmTokenBuilder().buildToken(
-                appId,
+                BuildConfig.APP_ID,
                 appCertificate, uid.toString(),
                 RtmTokenBuilder.Role.Rtm_User,
                 0
@@ -76,8 +72,8 @@ object KeyCenter {
     }
 
     fun getRtmToken2(uid: Int): String {
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
+        val appId = APP_ID
+        val appCertificate = BuildConfig.APP_CERTIFICATE
         if (appCertificate.isEmpty()) {
             return ""
         }

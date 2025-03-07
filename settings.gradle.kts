@@ -27,4 +27,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Agora-AITest"
 include(":app")
-include(":maas")
