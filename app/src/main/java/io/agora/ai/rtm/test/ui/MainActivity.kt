@@ -2,12 +2,13 @@ package io.agora.ai.rtm.test.ui
 
 import android.Manifest
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
-import io.agora.ai.rtm.test.R
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.databinding.ActivityMainBinding
 import io.agora.ai.rtm.test.rtm.RtmManager
@@ -25,19 +26,23 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     companion object {
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
-
-        const val RTM_TEST_MAX_COUNT = 100
+        const val DEFAULT_TEST_COUNT = 100
     }
 
     private lateinit var binding: ActivityMainBinding
 
     private var mChannelName = "testAga"
-    private var mJoinSuccess = false
 
     private var mLoginTime = 0L
     private var mSendRtmMessageTime = 0L
     private var mSendRtmMessage = ""
 
+    private var loginConnectedDiffSum = 0L
+    private var receiverMessageDiffSum = 0L
+    private var receiverMessageFromLoginDiffSum = 0L
+    private var testCount = 0
+
+    private var remainingTests = 0
 
     private var mHistoryFileName = ""
     private val logExecutor = Executors.newSingleThreadExecutor()
@@ -49,7 +54,6 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         checkPermissions()
-        initData()
         initView()
         RtmManager.create(KeyCenter.APP_ID, KeyCenter.getRtmUid().toString(), this)
     }
@@ -57,9 +61,12 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     override fun onDestroy() {
         super.onDestroy()
         RtmManager.release()
+        closeWriter()
     }
 
     private fun initWriter() {
+        //closeWriter()
+
         val cacheDir = externalCacheDir
         val logFile = File(cacheDir, mHistoryFileName)
         try {
@@ -120,51 +127,75 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
         }
     }
 
-    private fun initData() {
+    private fun resetData() {
         mSendRtmMessageTime = 0L
         mSendRtmMessage = ""
     }
 
+    private fun resetTestStats() {
+        loginConnectedDiffSum = 0L
+        receiverMessageDiffSum = 0L
+        receiverMessageFromLoginDiffSum = 0L
+        testCount = 0
+    }
 
     private fun initView() {
         handleOnBackPressed()
-        updateUI()
 
-        binding.btnJoin.setOnClickListener {
-            if (mJoinSuccess) {
-                RtmManager.unsubscribeMessageChannel(mChannelName)
-                RtmManager.rtmLogout()
-                closeWriter()
-            } else {
-                initData()
-                val channelName = binding.etChannelName.text.toString()
-                if (channelName.isNotEmpty()) {
-                    mChannelName = channelName
-                }
-                mHistoryFileName =
-                    "history-${mChannelName}-${KeyCenter.getRtcUid()}-${System.currentTimeMillis()}.txt"
-                initWriter()
-                mLoginTime = System.currentTimeMillis()
-                RtmManager.login(KeyCenter.getRtmToken2(KeyCenter.getRtmUid()))
-            }
-
+        binding.btnStop.setOnClickListener {
+            remainingTests = 0
         }
 
-        binding.btnSendRtmMessage.setOnClickListener {
-            sendRtmMessages()
+        binding.btnRtmTest.setOnClickListener {
+            val channelName = binding.etChannelName.text.toString()
+            if (channelName.isNotEmpty()) {
+                mChannelName = channelName
+            }
+            mHistoryFileName =
+                "history-${mChannelName}-${KeyCenter.getRtmUid()}-${System.currentTimeMillis()}.txt"
+
+            remainingTests = run {
+                val customCount = binding.etCustomCount.text.toString()
+                if (customCount.isEmpty()) DEFAULT_TEST_COUNT else customCount.toInt()
+            }
+            Log.d(TAG, "remainingTests:$remainingTests")
+
+            initWriter()
+            resetTestStats()
+            startRtmTestCycle()
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
+    }
 
-        binding.btnClear.setOnClickListener {
-            binding.tvHistory.text = ""
+    private fun startRtmTestCycle() {
+        updateHistoryUI("Test Start remainingTests:$remainingTests")
+        if (remainingTests > 0) {
+            binding.btnRtmTest.isEnabled = false
+            remainingTests--
+            loginRtm()
+        } else {
+            binding.btnRtmTest.isEnabled = true
+            updateHistoryUI("Test End")
         }
+    }
+
+    private fun loginRtm() {
+        resetData()
+
+        mLoginTime = System.currentTimeMillis()
+        RtmManager.login(KeyCenter.getRtmToken2(KeyCenter.getRtmUid()))
+    }
+
+    private fun logoutRtm() {
+        RtmManager.unsubscribeMessageChannel(mChannelName)
+        RtmManager.rtmLogout()
     }
 
 
     private fun sendRtmMessages() {
         mSendRtmMessageTime = System.currentTimeMillis()
-        mSendRtmMessage = "rtmMessage:$mSendRtmMessageTime"
+        mSendRtmMessage = "rtmMessage$mSendRtmMessageTime"
 
         val ret =
             RtmManager.sendRtmMessage(mSendRtmMessage.toByteArray(Charsets.UTF_8), mChannelName)
@@ -192,13 +223,6 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
         finishAffinity()
         finish()
         exitProcess(0)
-    }
-
-    private fun updateUI() {
-        binding.btnSendRtmMessage.isEnabled = mJoinSuccess
-
-        binding.btnJoin.text =
-            if (mJoinSuccess) getText(R.string.leave) else getText(R.string.join)
     }
 
     private fun updateToolbarTitle(title: String) {
@@ -234,14 +258,20 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
         Log.d(TAG, "onRtmMessageReceived  message:$message ")
         if (0L != mSendRtmMessageTime && message == mSendRtmMessage) {
             val currentTime = System.currentTimeMillis()
-            val receiverMessageDiff =
-                "$currentTime:ReceiveRtmMessage:$message diff:${currentTime - mSendRtmMessageTime} ms"
-            val receiverMessageFromLoginDiff =
-                "$currentTime:ReceiveRtmMessage $message  from login diff:${currentTime - mLoginTime} ms"
-            Log.d(TAG, receiverMessageDiff)
-            updateHistoryUI(receiverMessageDiff)
-            Log.d(TAG, receiverMessageFromLoginDiff)
-            updateHistoryUI(receiverMessageFromLoginDiff)
+            val sendRtmMessageDiff = currentTime - mSendRtmMessageTime;
+            receiverMessageDiffSum += sendRtmMessageDiff
+            val sendRtmMessageDiffStr =
+                "SendRtmMessage:$mSendRtmMessage diff:$sendRtmMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
+            Log.d(TAG, sendRtmMessageDiffStr)
+            updateHistoryUI(sendRtmMessageDiffStr)
+            val receiverMessageFromLoginDiff = currentTime - mLoginTime
+            receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
+            val receiverMessageFromLoginDiffStr =
+                "ReceiveRtmMessageFromLogin:$receiverMessageFromLoginDiff ms And average:${receiverMessageFromLoginDiffSum / testCount} ms"
+            Log.d(TAG, receiverMessageFromLoginDiffStr)
+            updateHistoryUI(receiverMessageFromLoginDiffStr)
+
+            logoutRtm()
         } else {
             updateHistoryUI("ReceiveRtmMessage:$message")
         }
@@ -249,11 +279,13 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
 
     override fun onRtmConnected() {
         Log.d(TAG, "onRtmConnected")
-        mJoinSuccess = true
         runOnUiThread {
-            updateUI()
+            val loginConnectedTime = System.currentTimeMillis() - mLoginTime
+            loginConnectedDiffSum += loginConnectedTime
+            testCount++
+
             val loginConnectedDiff =
-                "loginConnectedDiff:${System.currentTimeMillis() - mLoginTime} ms"
+                "loginConnectedDiff:${loginConnectedTime} ms And average:${loginConnectedDiffSum / testCount} ms"
             Log.d(TAG, loginConnectedDiff)
             updateHistoryUI(loginConnectedDiff)
             RtmManager.subscribeMessageChannel(mChannelName)
@@ -261,10 +293,9 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     }
 
     override fun onRtmDisconnected() {
-        mJoinSuccess = false
-        runOnUiThread {
-            updateUI()
-        }
+        Handler(Looper.getMainLooper()).postDelayed({
+            startRtmTestCycle()
+        }, 1000)
     }
 
     override fun onRtmSubscribed() {

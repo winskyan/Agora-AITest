@@ -22,26 +22,41 @@
             android:text="@string/app_name"
             android:textColor="@color/purple_700"
             android:textSize="16sp" />
-
-        <TextView
-            android:id="@+id/toolbar_setting"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="end"
-            android:layout_marginEnd="8dp"
-            android:gravity="center"
-            android:text="@string/settings"
-            android:textSize="14sp"
-            android:textStyle="bold" />
     </androidx.appcompat.widget.Toolbar>
 
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/settings_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
+
+        <EditText
+            android:id="@+id/etCustomCount"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/custom_test_count"
+            android:inputType="number"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <Button
+            android:id="@+id/btn_stop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/stop"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/etCustomCount" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
     <Button
-        android:id="@+id/btn_join"
+        android:id="@+id/btn_rtm_test"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/join"
+        android:text="@string/rtm_test"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbar" />
+        app:layout_constraintTop_toBottomOf="@id/settings_layout" />
 
 
     <EditText
@@ -51,27 +66,11 @@
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
         android:hint="@string/channel_name"
-        app:layout_constraintEnd_toStartOf="@id/btn_clear"
-        app:layout_constraintHorizontal_bias="1.0"
-        app:layout_constraintStart_toEndOf="@id/btn_join"
-        app:layout_constraintTop_toBottomOf="@id/toolbar" />
-
-    <Button
-        android:id="@+id/btn_clear"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/clear"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbar" />
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toEndOf="@id/btn_rtm_test"
+        app:layout_constraintTop_toBottomOf="@id/settings_layout" />
 
-
-    <Button
-        android:id="@+id/btn_send_rtm_message"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/send_rtm_message"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_join" />
 
     <TextView
         android:id="@+id/tv_history"
@@ -82,7 +81,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_send_rtm_message" />
+        app:layout_constraintTop_toBottomOf="@id/btn_rtm_test" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>
