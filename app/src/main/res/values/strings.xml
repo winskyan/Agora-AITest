@@ -1,7 +1,9 @@
 <resources>
     <string name="app_name">AgoraRtmTest</string>
     <string name="rtm_test">Rtm Test</string>
+    <string name="ws_test">Ws Test</string>
     <string name="channel_name">Channel Name</string>
+    <string name="ws_url">ws url</string>
     <string name="custom_test_count">Test Count(100)</string>
     <string name="stop">Stop</string>
 </resources>

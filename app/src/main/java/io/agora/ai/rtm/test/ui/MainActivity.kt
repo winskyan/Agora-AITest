@@ -13,6 +13,7 @@ import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.databinding.ActivityMainBinding
 import io.agora.ai.rtm.test.rtm.RtmManager
 import io.agora.ai.rtm.test.utils.KeyCenter
+import io.agora.ai.rtm.test.ws.WSManager
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import java.io.BufferedWriter
@@ -22,7 +23,8 @@ import java.io.IOException
 import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 
-class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
+class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
+    WSManager.WSMessageListener {
     companion object {
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
@@ -32,10 +34,11 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     private lateinit var binding: ActivityMainBinding
 
     private var mChannelName = "testAga"
+    private var mWsUrl = "wss://echo.websocket.org"
 
     private var mLoginTime = 0L
-    private var mSendRtmMessageTime = 0L
-    private var mSendRtmMessage = ""
+    private var mSendMessageTime = 0L
+    private var mSendMessage = ""
 
     private var loginConnectedDiffSum = 0L
     private var receiverMessageDiffSum = 0L
@@ -56,6 +59,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
         checkPermissions()
         initView()
         RtmManager.create(KeyCenter.APP_ID, KeyCenter.getRtmUid().toString(), this)
+        WSManager.create(this)
     }
 
     override fun onDestroy() {
@@ -128,8 +132,8 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     }
 
     private fun resetData() {
-        mSendRtmMessageTime = 0L
-        mSendRtmMessage = ""
+        mSendMessageTime = 0L
+        mSendMessage = ""
     }
 
     private fun resetTestStats() {
@@ -152,7 +156,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
                 mChannelName = channelName
             }
             mHistoryFileName =
-                "history-${mChannelName}-${KeyCenter.getRtmUid()}-${System.currentTimeMillis()}.txt"
+                "history-rtm-${mChannelName}-${KeyCenter.getRtmUid()}-${System.currentTimeMillis()}.txt"
 
             remainingTests = run {
                 val customCount = binding.etCustomCount.text.toString()
@@ -163,6 +167,25 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
             initWriter()
             resetTestStats()
             startRtmTestCycle()
+        }
+
+        binding.btnWsTest.setOnClickListener {
+            val wsUrl = binding.etWsUrl.text.toString()
+            if (wsUrl.isNotEmpty()) {
+                mWsUrl = wsUrl
+            }
+            mHistoryFileName =
+                "history-ws-${System.currentTimeMillis()}.txt"
+
+            remainingTests = run {
+                val customCount = binding.etCustomCount.text.toString()
+                if (customCount.isEmpty()) DEFAULT_TEST_COUNT else customCount.toInt()
+            }
+            Log.d(TAG, "remainingTests:$remainingTests")
+
+            initWriter()
+            resetTestStats()
+            startWsTestCycle()
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
@@ -194,16 +217,16 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
 
 
     private fun sendRtmMessages() {
-        mSendRtmMessageTime = System.currentTimeMillis()
-        mSendRtmMessage = "rtmMessage$mSendRtmMessageTime"
+        mSendMessageTime = System.currentTimeMillis()
+        mSendMessage = "rtmMessage$mSendMessageTime"
 
         val ret =
-            RtmManager.sendRtmMessage(mSendRtmMessage.toByteArray(Charsets.UTF_8), mChannelName)
+            RtmManager.sendRtmMessage(mSendMessage.toByteArray(Charsets.UTF_8), mChannelName)
         if (ret != 0) {
             Log.e(TAG, "sendRtmMessage failed")
             return
         }
-        updateHistoryUI("SendRtmMessage:$mSendRtmMessage")
+        updateHistoryUI("SendRtmMessage:$mSendMessage")
     }
 
     private fun handleOnBackPressed() {
@@ -256,12 +279,12 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
 
     override fun onRtmMessageReceived(message: String) {
         Log.d(TAG, "onRtmMessageReceived  message:$message ")
-        if (0L != mSendRtmMessageTime && message == mSendRtmMessage) {
+        if (0L != mSendMessageTime && message == mSendMessage) {
             val currentTime = System.currentTimeMillis()
-            val sendRtmMessageDiff = currentTime - mSendRtmMessageTime;
+            val sendRtmMessageDiff = currentTime - mSendMessageTime;
             receiverMessageDiffSum += sendRtmMessageDiff
             val sendRtmMessageDiffStr =
-                "SendRtmMessage:$mSendRtmMessage diff:$sendRtmMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
+                "SendRtmMessage:$mSendMessage diff:$sendRtmMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
             Log.d(TAG, sendRtmMessageDiffStr)
             updateHistoryUI(sendRtmMessageDiffStr)
             val receiverMessageFromLoginDiff = currentTime - mLoginTime
@@ -301,4 +324,90 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener {
     override fun onRtmSubscribed() {
         sendRtmMessages()
     }
+
+    private fun connectWs(url: String) {
+        Log.d(TAG, "connectWs url:$url")
+        resetData()
+        mLoginTime = System.currentTimeMillis()
+        WSManager.connect(url)
+    }
+
+    private fun sendWsMessage() {
+        mSendMessageTime = System.currentTimeMillis()
+        mSendMessage = "wsMessage$mSendMessageTime"
+
+        WSManager.sendMessage(mSendMessage.toByteArray(Charsets.UTF_8))
+        Log.d(TAG, "sendWsMessage:$mSendMessage")
+        updateHistoryUI("SendWsMessage:$mSendMessage")
+    }
+
+    private fun logoutWs() {
+        WSManager.release()
+    }
+
+    private fun startWsTestCycle() {
+        updateHistoryUI("Test Start remainingTests:$remainingTests")
+        if (remainingTests > 0) {
+            binding.btnWsTest.isEnabled = false
+            remainingTests--
+            connectWs(mWsUrl)
+        } else {
+            binding.btnWsTest.isEnabled = true
+            updateHistoryUI("Test End")
+        }
+    }
+
+    override fun onWSConnected() {
+        Log.d(TAG, "onWSConnected")
+        runOnUiThread {
+            val loginConnectedTime = System.currentTimeMillis() - mLoginTime
+            loginConnectedDiffSum += loginConnectedTime
+            testCount++
+
+            val loginConnectedDiff =
+                "ws loginConnectedDiff:${loginConnectedTime} ms And average:${loginConnectedDiffSum / testCount} ms"
+            Log.d(TAG, loginConnectedDiff)
+            updateHistoryUI(loginConnectedDiff)
+            sendWsMessage()
+        }
+    }
+
+    override fun onWSDisconnected() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            startWsTestCycle()
+        }, 1000)
+    }
+
+    override fun onWSMessageReceived(message: String) {
+
+    }
+
+    override fun onWSMessageReceived(message: ByteArray) {
+        Log.d(TAG, "onWSMessageReceived  message:${String(message)}")
+        if (0L != mSendMessageTime && String(message) == mSendMessage) {
+            val currentTime = System.currentTimeMillis()
+            val sendMessageDiff = currentTime - mSendMessageTime;
+            receiverMessageDiffSum += sendMessageDiff
+            val sendWsMessageDiffStr =
+                "ReceiverWsMessage:$mSendMessage diff:$sendMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
+            Log.d(TAG, sendWsMessageDiffStr)
+            updateHistoryUI(sendWsMessageDiffStr)
+            val receiverMessageFromLoginDiff = currentTime - mLoginTime
+            receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
+            val receiverMessageFromLoginDiffStr =
+                "ReceiveWsMessageFromLogin:$receiverMessageFromLoginDiff ms And average:${receiverMessageFromLoginDiffSum / testCount} ms"
+            Log.d(TAG, receiverMessageFromLoginDiffStr)
+            updateHistoryUI(receiverMessageFromLoginDiffStr)
+            logoutWs()
+
+        } else {
+            updateHistoryUI("ReceiveRtmMessage:$message")
+        }
+    }
+
+    override fun onWSError(errorMessage: String) {
+
+    }
+
+
 }
