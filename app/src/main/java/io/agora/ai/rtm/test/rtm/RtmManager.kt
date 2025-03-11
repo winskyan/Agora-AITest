@@ -92,7 +92,7 @@ object RtmManager {
             object : SubscribeOptions() {
                 init {
                     withMessage = true
-                    withPresence = true
+                    withPresence = false
                 }
             },
             object : ResultCallback<Void> {

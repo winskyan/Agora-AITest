@@ -1,82 +1,120 @@
 # Agora AITest
 
-## 运行 Example
+## 项目简介
 
-### 配置 Key
+这是一个用于测试声网RTM和WebSocket连接性能的Android应用程序。通过该应用，您可以测试RTM和WebSocket的连接速度、消息收发延迟等性能指标。
 
-在 `local.properties` 文件中配置以下信息：
+## 运行指南
+
+### 配置密钥
+
+在项目根目录下的 `local.properties` 文件中配置以下信息：
 
 ```properties
-APP_ID=你的应用ID
-APP_CERTIFICATE=你的证书密钥
+APP_ID=你的声网应用ID
+APP_CERTIFICATE=你的声网证书密钥
 ```
 
-### 运行
+### 运行应用
 
-在 Android Studio 中打开项目，选择 `app` 模块并运行。
+1. 在 Android Studio 中打开项目
+2. 选择 `app` 模块
+3. 点击运行按钮或按下 `Shift+F10` 运行应用
 
-### 使用方法
+## 功能说明
 
-#### Test Count(100)
+### 测试次数设置 (Test Count)
 
-该功能指测试RTM或者ws链接的次数。默认是100次。
+- 功能：设置RTM或WebSocket连接测试的次数
+- 默认值：100次
+- 使用方法：在应用界面输入框中修改测试次数
 
-#### Stop
+### 停止测试 (Stop)
 
-该功能指停止测试。
+- 功能：立即停止当前正在进行的测试
+- 使用方法：点击"Stop"按钮
 
-#### Rtm Test
+### RTM测试 (Rtm Test)
 
-该功能指测试RTM链接,测试流程为login->onRtmConnected->subscribe->onRtmSubscribed->sendRtmMessage->receiveRtmMessage->unsubscribe->logout。点击一次执行指定测试次数，测试数据包括login开始到connected时间，发送rtm消息收到返回相同消息的时间，收到消息与开始login时间。
+- 功能：测试声网RTM服务的连接性能
+- 默认频道: wei888
+- 测试流程：
+  1. 登录RTM (login)
+  2. 连接成功回调 (onRtmConnected)
+  3. 订阅频道 (subscribe)
+  4. 订阅成功回调 (onRtmSubscribed)
+  5. 发送RTM消息 (sendRtmMessage)
+  6. 接收RTM消息 (receiveRtmMessage)
+  7. 取消订阅 (unsubscribe)
+  8. 登出 (logout)
+- 每次测试：登录后在频道内发送和接收20次消息，然后登出
+- 测试数据：
+  - 从开始登录到连接成功的时间
+  - 发送RTM消息到收到相同消息的平均时间
+  - 从开始登录到收到第一条消息的时间
 
-#### Ws Test
+### WebSocket测试 (Ws Test)
 
-该功能指测试WS链接,测试流程为connectWs->onWSConnected->sendWsMessage->receiveWsMessage->logoutWs。点击一次执行指定测试次数，测试数据包括login开始到connected时间，发送ws消息收到返回相同消息的时间，收到消息与开始login时间。
+- 功能：测试WebSocket连接性能
+- 默认URL: wss://108.129.196.84:8765
+- 测试流程：
+  1. 连接WebSocket (connectWs)
+  2. 连接成功回调 (onWSConnected)
+  3. 发送WebSocket消息 (sendWsMessage)
+  4. 接收WebSocket消息 (receiveWsMessage)
+  5. 断开连接 (logoutWs)
+- 每次测试：连接后在频道内发送和接收20次消息，然后断开连接
+- 测试数据：
+  - 从开始连接到连接成功的时间
+  - 发送WebSocket消息到收到相同消息的平均时间
+  - 从开始连接到收到第一条消息的时间
 
-#### 测试结果
+## 测试结果
 
-测试结果会显示在logcat和UI中，并且会保存到`sdcard/Android/data/io.agora.ai.rtm.test/history*.txt`文件中,统计包含单次测试的时间和平均时间。
+测试结果会通过以下三种方式呈现：
 
-##### `history-rtm*.txt`为RTM测试结果,示例如下
+1. **日志输出**：在Logcat中查看详细测试数据
+2. **界面显示**：在应用UI中显示测试结果摘要
+3. **文件保存**：测试数据会保存到设备存储中
+
+### 结果文件位置
+
+测试结果保存在设备的以下路径：
 
 ```
-Test Start remainingTests:3
-loginConnectedDiff:255ms average:255ms
-SendRtmMessage:rtmMessage1741674599416
-ReceiveRtmMessage:rtmMessage1741674599416 diff:79ms average:79ms
-ReceiveRtmMessage:rtmMessage1741674599416 from login diff:476ms average:476ms
-Test Start remainingTests:2
-loginConnectedDiff:163ms average:209ms
-SendRtmMessage:rtmMessage1741674600888
-ReceiveRtmMessage:rtmMessage1741674600888 diff:1889ms average:984ms
-ReceiveRtmMessage:rtmMessage1741674600888 from login diff:2160ms average:1318ms
-Test Start remainingTests:1
-loginConnectedDiff:195ms average:204ms
-SendRtmMessage:rtmMessage1741674604233
-ReceiveRtmMessage:rtmMessage1741674604233 diff:1869ms average:1279ms
-ReceiveRtmMessage:rtmMessage1741674604233 from login diff:2189ms average:1608ms
-Test Start remainingTests:0
-Test End
+sdcard/Android/data/io.agora.ai.rtm.test/history*.txt
 ```
 
-##### `history-ws*.txt`为WS测试结果,示例如下
+### 结果文件说明
 
-```
-Test Start remainingTests:3
-ws loginConnectedDiff:1494ms average:1494ms
-SendWsMessage:wsMessage1741674638789
-ReceiverWsMessage:wsMessage1741674638789 diff:476ms average:476ms
-ReceiverWsMessage:wsMessage1741674638789 from login diff:1980ms average:1980ms
-Test Start remainingTests:2
-ws loginConnectedDiff:1667ms average:1580ms
-SendWsMessage:wsMessage1741674642463
-ReceiverWsMessage:wsMessage1741674642463 diff:608ms average:542ms
-ReceiverWsMessage:wsMessage1741674642463 from login diff:2285ms average:2132ms
-Test Start remainingTests:1
-ws loginConnectedDiff:1761ms average:1640ms
-SendWsMessage:wsMessage1741674646458
-ReceiverWsMessage:wsMessage1741674646458 diff:536ms average:540ms
-ReceiverWsMessage:wsMessage1741674646458 from login diff:2307ms average:2190ms
-Test Start remainingTests:0
-Test End
-```
+#### RTM测试结果文件 (`history-rtm*.txt`)
+
+RTM测试结果文件包含以下信息：
+
+- 每次测试的开始标记和剩余测试次数
+- 登录连接时间及平均值
+- 每条消息的发送和接收平均时间
+- 消息收发延迟及平均值
+- 从登录到收到第一条消息的时间
+- 测试统计摘要（平均连接时间、平均消息延迟、测试计数）
+
+#### WebSocket测试结果文件 (`history-ws*.txt`)
+
+WebSocket测试结果文件包含以下信息：
+
+- 每次测试的开始标记和剩余测试次数
+- WebSocket连接时间及平均值
+- 每条消息的发送和接收平均时间
+- 消息收发延迟及平均值
+- 从连接到收到第一条消息的时间
+- 测试统计摘要（平均连接时间、平均消息延迟、测试计数）
+
+## 使用方法
+
+1. 安装apk
+2. 打开主页面，输入Test Count，默认是100次
+3. 如果测试RTM，输入Channel Name，默认是wei888,然后点击Rtm Test按钮开始测试
+4. 如果测试WebSocket，输入URL，默认是wss://108.129.196.84:8765,然后点击Ws Test按钮开始测试
+5. 测试过程中可以点击Stop按钮停止测试
+6. 测试完成后，会显示测试结果，包括连接时间，消息延迟，收到第一条消息的时间
+7. 测试结果会保存在手机的sdcard/Android/data/io.agora.ai.rtm.test/history*.txt路径下

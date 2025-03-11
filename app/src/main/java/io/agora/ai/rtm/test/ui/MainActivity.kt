@@ -29,11 +29,13 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
         const val DEFAULT_TEST_COUNT = 100
+        const val MAX_IN_CHANNEL_TEST_COUNT = 20
+        const val INTERVAL_LOOP_WAIT = 10 * 1000L
     }
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "testAga"
+    private var mChannelName = "wei888"
 
     //private var mWsUrl = "wss://echo.websocket.org"
     private var mWsUrl = "wss://108.129.196.84:8765"
@@ -47,7 +49,10 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
     private var receiverMessageFromLoginDiffSum = 0L
     private var testCount = 0
 
+    private var receiverMessageInChannelDiffSum = 0L
+
     private var remainingTests = 0
+    private var remainInChannelTestCount = 0
 
     private var mHistoryFileName = ""
     private val logExecutor = Executors.newSingleThreadExecutor()
@@ -168,7 +173,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
             initWriter()
             resetTestStats()
-            startRtmTestCycle()
+            startRtmTestCycle(true)
         }
 
         binding.btnWsTest.setOnClickListener {
@@ -187,28 +192,35 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
             initWriter()
             resetTestStats()
-            startWsTestCycle()
+            startWsTestCycle(true)
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
     }
 
-    private fun startRtmTestCycle() {
-        updateHistoryUI("Test Start remainingTests:$remainingTests")
+    private fun startRtmTestCycle(firstTest: Boolean = false) {
         if (remainingTests > 0) {
-            binding.btnRtmTest.isEnabled = false
+            runOnUiThread { binding.btnRtmTest.isEnabled = false }
+            var delayTime = INTERVAL_LOOP_WAIT
+            if (firstTest) {
+                delayTime = 0
+            }
             remainingTests--
-            loginRtm()
+            Handler(Looper.getMainLooper()).postDelayed({
+                updateHistoryUI("Rtm Test Start remainingTests:$remainingTests")
+                loginRtm()
+            }, delayTime)
         } else {
-            binding.btnRtmTest.isEnabled = true
-            updateHistoryUI("Test End")
+            runOnUiThread {
+                binding.btnRtmTest.isEnabled = true
+                updateHistoryUI("Rtm Test End")
+            }
+
         }
     }
 
     private fun loginRtm() {
-        resetData()
-
-        mLoginTime = System.currentTimeMillis()
+        updateLoginTime()
         RtmManager.login(KeyCenter.getRtmToken2(KeyCenter.getRtmUid()))
     }
 
@@ -219,6 +231,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
 
     private fun sendRtmMessages() {
+        remainInChannelTestCount--
         mSendMessageTime = System.currentTimeMillis()
         mSendMessage = "rtmMessage$mSendMessageTime"
 
@@ -229,6 +242,12 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
             return
         }
         updateHistoryUI("SendRtmMessage:$mSendMessage")
+    }
+
+    private fun updateTestAverage() {
+        val averageDiff =
+            "login Connected diff average:${loginConnectedDiffSum / testCount}ms,echo message average:${receiverMessageDiffSum / testCount}ms,receiver first echo message from login average:${receiverMessageFromLoginDiffSum / testCount}ms,test count:$testCount"
+        updateHistoryUI(averageDiff)
     }
 
     private fun handleOnBackPressed() {
@@ -255,6 +274,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
     }
 
     private fun updateHistoryUI(message: String) {
+        Log.d(TAG, message)
         runOnUiThread {
             binding.tvHistory.append("\r\n\r\n$message")
             val scrollAmount =
@@ -279,24 +299,43 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         }
     }
 
+    private fun updateLoginTime() {
+        resetData()
+
+        mLoginTime = System.currentTimeMillis()
+        remainInChannelTestCount = MAX_IN_CHANNEL_TEST_COUNT
+        receiverMessageInChannelDiffSum = 0L
+    }
+
     override fun onRtmMessageReceived(message: String) {
         Log.d(TAG, "onRtmMessageReceived  message:$message ")
         if (0L != mSendMessageTime && message == mSendMessage) {
             val currentTime = System.currentTimeMillis()
             val sendRtmMessageDiff = currentTime - mSendMessageTime;
-            receiverMessageDiffSum += sendRtmMessageDiff
+            receiverMessageInChannelDiffSum += sendRtmMessageDiff
+            val receiverMessageInChannelAverageDiff =
+                receiverMessageInChannelDiffSum / (MAX_IN_CHANNEL_TEST_COUNT - remainInChannelTestCount)
             val sendRtmMessageDiffStr =
-                "ReceiveRtmMessage:$mSendMessage diff:${sendRtmMessageDiff}ms average:${receiverMessageDiffSum / testCount}ms"
-            Log.d(TAG, sendRtmMessageDiffStr)
+                "ReceiveRtmMessage:$mSendMessage diff:${sendRtmMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
             updateHistoryUI(sendRtmMessageDiffStr)
-            val receiverMessageFromLoginDiff = currentTime - mLoginTime
-            receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
-            val receiverMessageFromLoginDiffStr =
-                "ReceiveRtmMessage:$mSendMessage from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
-            Log.d(TAG, receiverMessageFromLoginDiffStr)
-            updateHistoryUI(receiverMessageFromLoginDiffStr)
 
-            logoutRtm()
+            if (remainInChannelTestCount == 0) {
+                receiverMessageDiffSum += receiverMessageInChannelAverageDiff
+            }
+
+            if (remainInChannelTestCount == MAX_IN_CHANNEL_TEST_COUNT - 1) {
+                val receiverMessageFromLoginDiff = currentTime - mLoginTime
+                receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
+                val receiverMessageFromLoginDiffStr =
+                    "Receive First Rtm Message from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
+                updateHistoryUI(receiverMessageFromLoginDiffStr)
+            }
+
+            if (remainInChannelTestCount > 0) {
+                sendRtmMessages()
+            } else {
+                logoutRtm()
+            }
         } else {
             updateHistoryUI("ReceiveRtmMessage:$message")
         }
@@ -311,16 +350,16 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
             val loginConnectedDiff =
                 "loginConnectedDiff:${loginConnectedTime}ms average:${loginConnectedDiffSum / testCount}ms"
-            Log.d(TAG, loginConnectedDiff)
             updateHistoryUI(loginConnectedDiff)
             RtmManager.subscribeMessageChannel(mChannelName)
         }
     }
 
     override fun onRtmDisconnected() {
-        Handler(Looper.getMainLooper()).postDelayed({
-            startRtmTestCycle()
-        }, 10 * 1000)
+        runOnUiThread {
+            updateTestAverage()
+        }
+        startRtmTestCycle()
     }
 
     override fun onRtmSubscribed() {
@@ -329,18 +368,17 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
     private fun connectWs(url: String) {
         Log.d(TAG, "connectWs url:$url")
-        resetData()
-        mLoginTime = System.currentTimeMillis()
+        updateLoginTime()
         WSManager.connect(url)
     }
 
     private fun sendWsMessage() {
+        remainInChannelTestCount--
         mSendMessageTime = System.currentTimeMillis()
         mSendMessage = "wsMessage$mSendMessageTime"
 
         //WSManager.sendMessage(mSendMessage.toByteArray(Charsets.UTF_8))
         WSManager.sendMessage(mSendMessage)
-        Log.d(TAG, "sendWsMessage:$mSendMessage")
         updateHistoryUI("SendWsMessage:$mSendMessage")
     }
 
@@ -348,15 +386,23 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         WSManager.release()
     }
 
-    private fun startWsTestCycle() {
-        updateHistoryUI("Test Start remainingTests:$remainingTests")
+    private fun startWsTestCycle(firstTest: Boolean = false) {
         if (remainingTests > 0) {
-            binding.btnWsTest.isEnabled = false
+            runOnUiThread { binding.btnWsTest.isEnabled = false }
+            var delayTime = INTERVAL_LOOP_WAIT
+            if (firstTest) {
+                delayTime = 0
+            }
             remainingTests--
-            connectWs(mWsUrl)
+            Handler(Looper.getMainLooper()).postDelayed({
+                updateHistoryUI("Ws Test Start remainingTests:$remainingTests")
+                connectWs(mWsUrl)
+            }, delayTime)
         } else {
-            binding.btnWsTest.isEnabled = true
-            updateHistoryUI("Test End")
+            runOnUiThread {
+                binding.btnWsTest.isEnabled = true
+                updateHistoryUI("Ws Test End")
+            }
         }
     }
 
@@ -369,16 +415,16 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
             val loginConnectedDiff =
                 "ws loginConnectedDiff:${loginConnectedTime}ms average:${loginConnectedDiffSum / testCount}ms"
-            Log.d(TAG, loginConnectedDiff)
             updateHistoryUI(loginConnectedDiff)
             sendWsMessage()
         }
     }
 
     override fun onWSDisconnected() {
-        Handler(Looper.getMainLooper()).postDelayed({
-            startWsTestCycle()
-        }, 1000)
+        runOnUiThread {
+            updateTestAverage()
+        }
+        startWsTestCycle()
     }
 
     override fun onWSMessageReceived(message: String) {
@@ -386,19 +432,31 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         if (0L != mSendMessageTime && message == mSendMessage) {
             val currentTime = System.currentTimeMillis()
             val sendMessageDiff = currentTime - mSendMessageTime;
-            receiverMessageDiffSum += sendMessageDiff
-            val sendWsMessageDiffStr =
-                "ReceiverWsMessage:$mSendMessage diff:${sendMessageDiff}ms average:${receiverMessageDiffSum / testCount}ms"
-            Log.d(TAG, sendWsMessageDiffStr)
-            updateHistoryUI(sendWsMessageDiffStr)
-            val receiverMessageFromLoginDiff = currentTime - mLoginTime
-            receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
-            val receiverMessageFromLoginDiffStr =
-                "ReceiverWsMessage:$mSendMessage from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
-            Log.d(TAG, receiverMessageFromLoginDiffStr)
-            updateHistoryUI(receiverMessageFromLoginDiffStr)
-            logoutWs()
 
+            receiverMessageInChannelDiffSum += sendMessageDiff
+            val receiverMessageInChannelAverageDiff =
+                receiverMessageInChannelDiffSum / (MAX_IN_CHANNEL_TEST_COUNT - remainInChannelTestCount)
+            val sendRtmMessageDiffStr =
+                "ReceiverWsMessage:$mSendMessage diff:${sendMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
+            updateHistoryUI(sendRtmMessageDiffStr)
+
+            if (remainInChannelTestCount == 0) {
+                receiverMessageDiffSum += receiverMessageInChannelAverageDiff
+            }
+
+            if (remainInChannelTestCount == MAX_IN_CHANNEL_TEST_COUNT - 1) {
+                val receiverMessageFromLoginDiff = currentTime - mLoginTime
+                receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
+                val receiverMessageFromLoginDiffStr =
+                    "ReceiverWsMessage:$mSendMessage from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
+                updateHistoryUI(receiverMessageFromLoginDiffStr)
+            }
+
+            if (remainInChannelTestCount > 0) {
+                sendWsMessage()
+            } else {
+                logoutWs()
+            }
         } else {
             updateHistoryUI("ReceiveRtmMessage:$message")
         }
