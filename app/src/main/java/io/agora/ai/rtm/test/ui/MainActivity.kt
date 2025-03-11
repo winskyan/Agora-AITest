@@ -34,7 +34,9 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
     private lateinit var binding: ActivityMainBinding
 
     private var mChannelName = "testAga"
-    private var mWsUrl = "wss://echo.websocket.org"
+
+    //private var mWsUrl = "wss://echo.websocket.org"
+    private var mWsUrl = "wss://108.129.196.84:8765"
 
     private var mLoginTime = 0L
     private var mSendMessageTime = 0L
@@ -318,7 +320,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
     override fun onRtmDisconnected() {
         Handler(Looper.getMainLooper()).postDelayed({
             startRtmTestCycle()
-        }, 1000)
+        }, 10 * 1000)
     }
 
     override fun onRtmSubscribed() {
@@ -336,7 +338,8 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         mSendMessageTime = System.currentTimeMillis()
         mSendMessage = "wsMessage$mSendMessageTime"
 
-        WSManager.sendMessage(mSendMessage.toByteArray(Charsets.UTF_8))
+        //WSManager.sendMessage(mSendMessage.toByteArray(Charsets.UTF_8))
+        WSManager.sendMessage(mSendMessage)
         Log.d(TAG, "sendWsMessage:$mSendMessage")
         updateHistoryUI("SendWsMessage:$mSendMessage")
     }
@@ -379,12 +382,8 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
     }
 
     override fun onWSMessageReceived(message: String) {
-
-    }
-
-    override fun onWSMessageReceived(message: ByteArray) {
-        Log.d(TAG, "onWSMessageReceived  message:${String(message)}")
-        if (0L != mSendMessageTime && String(message) == mSendMessage) {
+        Log.d(TAG, "onWSMessageReceived  message:${message}")
+        if (0L != mSendMessageTime && message == mSendMessage) {
             val currentTime = System.currentTimeMillis()
             val sendMessageDiff = currentTime - mSendMessageTime;
             receiverMessageDiffSum += sendMessageDiff
@@ -403,6 +402,11 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
         } else {
             updateHistoryUI("ReceiveRtmMessage:$message")
         }
+    }
+
+    override fun onWSMessageReceived(message: ByteArray) {
+        Log.d(TAG, "onWSMessageReceived  message:${String(message)}")
+        onWSMessageReceived(String(message))
     }
 
     override fun onWSError(errorMessage: String) {
