@@ -284,13 +284,13 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
             val sendRtmMessageDiff = currentTime - mSendMessageTime;
             receiverMessageDiffSum += sendRtmMessageDiff
             val sendRtmMessageDiffStr =
-                "SendRtmMessage:$mSendMessage diff:$sendRtmMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
+                "ReceiveRtmMessage:$mSendMessage diff:${sendRtmMessageDiff}ms average:${receiverMessageDiffSum / testCount}ms"
             Log.d(TAG, sendRtmMessageDiffStr)
             updateHistoryUI(sendRtmMessageDiffStr)
             val receiverMessageFromLoginDiff = currentTime - mLoginTime
             receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
             val receiverMessageFromLoginDiffStr =
-                "ReceiveRtmMessageFromLogin:$receiverMessageFromLoginDiff ms And average:${receiverMessageFromLoginDiffSum / testCount} ms"
+                "ReceiveRtmMessage:$mSendMessage from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
             Log.d(TAG, receiverMessageFromLoginDiffStr)
             updateHistoryUI(receiverMessageFromLoginDiffStr)
 
@@ -308,7 +308,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
             testCount++
 
             val loginConnectedDiff =
-                "loginConnectedDiff:${loginConnectedTime} ms And average:${loginConnectedDiffSum / testCount} ms"
+                "loginConnectedDiff:${loginConnectedTime}ms average:${loginConnectedDiffSum / testCount}ms"
             Log.d(TAG, loginConnectedDiff)
             updateHistoryUI(loginConnectedDiff)
             RtmManager.subscribeMessageChannel(mChannelName)
@@ -365,7 +365,7 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
             testCount++
 
             val loginConnectedDiff =
-                "ws loginConnectedDiff:${loginConnectedTime} ms And average:${loginConnectedDiffSum / testCount} ms"
+                "ws loginConnectedDiff:${loginConnectedTime}ms average:${loginConnectedDiffSum / testCount}ms"
             Log.d(TAG, loginConnectedDiff)
             updateHistoryUI(loginConnectedDiff)
             sendWsMessage()
@@ -389,13 +389,13 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
             val sendMessageDiff = currentTime - mSendMessageTime;
             receiverMessageDiffSum += sendMessageDiff
             val sendWsMessageDiffStr =
-                "ReceiverWsMessage:$mSendMessage diff:$sendMessageDiff ms And average:${receiverMessageDiffSum / testCount} ms"
+                "ReceiverWsMessage:$mSendMessage diff:${sendMessageDiff}ms average:${receiverMessageDiffSum / testCount}ms"
             Log.d(TAG, sendWsMessageDiffStr)
             updateHistoryUI(sendWsMessageDiffStr)
             val receiverMessageFromLoginDiff = currentTime - mLoginTime
             receiverMessageFromLoginDiffSum += receiverMessageFromLoginDiff
             val receiverMessageFromLoginDiffStr =
-                "ReceiveWsMessageFromLogin:$receiverMessageFromLoginDiff ms And average:${receiverMessageFromLoginDiffSum / testCount} ms"
+                "ReceiverWsMessage:$mSendMessage from login diff:${receiverMessageFromLoginDiff}ms average:${receiverMessageFromLoginDiffSum / testCount}ms"
             Log.d(TAG, receiverMessageFromLoginDiffStr)
             updateHistoryUI(receiverMessageFromLoginDiffStr)
             logoutWs()
