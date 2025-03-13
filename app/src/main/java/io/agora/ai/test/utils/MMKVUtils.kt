@@ -33,6 +33,14 @@ object MMKVUtils {
         mmkv.encode(key, value)
     }
 
+    fun getFloat(key: String, defaultValue: Float = 0f): Float {
+        return mmkv.decodeFloat(key, defaultValue)
+    }
+
+    fun putFloat(key: String, value: Float) {
+        mmkv.encode(key, value)
+    }
+
     fun getBoolean(key: String, defaultValue: Boolean = false): Boolean {
         return mmkv.decodeBool(key, defaultValue)
     }

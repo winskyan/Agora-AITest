@@ -2,6 +2,7 @@ package io.agora.ai.test.ui
 
 import android.Manifest
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
@@ -18,6 +19,7 @@ import io.agora.ai.test.maas.MaaSConstants
 import io.agora.ai.test.maas.MaaSEngine
 import io.agora.ai.test.maas.MaaSEngineEventHandler
 import io.agora.ai.test.maas.model.AudioVolumeInfo
+import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.SceneMode
 import io.agora.ai.test.maas.model.VadConfiguration
@@ -25,6 +27,7 @@ import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.ai.test.ui.dialog.SettingsDialog
 import io.agora.ai.test.utils.KeyCenter
 import io.agora.ai.test.utils.Utils
+import io.agora.ai.test.utils.VideoFileReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,6 +84,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var mHistoryFileName = ""
     private val logExecutor = Executors.newSingleThreadExecutor()
     private lateinit var bufferedWriter: BufferedWriter
+
+    private var mVideoFileReader: VideoFileReader? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -247,6 +252,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
+                stopSendYuv()
                 stopSendingMessagesTest()
                 if (DemoContext.enableAudio) {
                     mMaaSEngine?.disableAudio()
@@ -256,6 +262,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     mMaaSEngine?.stopVideo()
                     DemoContext.enableVideo = false
                 }
+
                 mMaaSEngine?.leaveChannel()
                 MaaSEngine.destroy()
                 closeWriter()
@@ -269,14 +276,20 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     "history-${channelName}-${KeyCenter.getRtcUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
                 initWriter()
                 initEngine()
-                mMaaSEngine?.joinChannel(
-                    channelName,
-                    DemoContext.clientRoleType,
-                    registerRecordingAudio = DemoContext.enableStereoTest,
-                    registerPlaybackAudio = DemoContext.enableSaveAudio
-                )
-            }
+                JoinChannelConfig().apply {
+                    enableStereoTest = DemoContext.enableStereoTest
+                    enableSaveAudio = DemoContext.enableSaveAudio
+                    enablePushExternalVideo = DemoContext.enablePushExternalVideo
+                }.let {
+                    mMaaSEngine?.joinChannel(
+                        channelName,
+                        DemoContext.clientRoleType,
+                        it
+                    )
 
+                }
+
+            }
         }
 
         binding.btnEnableAudio.setOnClickListener {
@@ -383,6 +396,42 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnClear.setOnClickListener {
             binding.tvHistory.text = ""
+        }
+
+        binding.btnSendYuv.setOnClickListener {
+            sendYuv()
+        }
+    }
+
+    private fun sendYuv() {
+        mVideoFileReader = VideoFileReader(
+            applicationContext, "sample.yuv", 640, 360, DemoContext.fps,
+            videoReadListener = object : VideoFileReader.OnVideoReadListener {
+                override fun onVideoRead(
+                    buffer: ByteArray?,
+                    width: Int,
+                    height: Int,
+                    frameIndex: Int
+                ) {
+                    if (buffer != null) {
+                        mMaaSEngine?.pushVideoFrame(
+                            buffer,
+                            width,
+                            height,
+                            MaaSConstants.ViewFrameType.I420
+                        )
+                        updateHistoryUI("SendYuvFrame:$frameIndex")
+                    }
+                }
+            }
+        )
+        mVideoFileReader?.start()
+    }
+
+    private fun stopSendYuv() {
+        if (null != mVideoFileReader) {
+            mVideoFileReader?.stop()
+            mVideoFileReader = null
         }
     }
 
@@ -505,6 +554,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnSendStreamMessage.isEnabled = mJoinSuccess
         binding.btnSendAudioMetadata.isEnabled = mJoinSuccess
         binding.btnSendRtmMessage.isEnabled = mJoinSuccess
+        binding.btnSendYuv.isEnabled = mJoinSuccess
 
         binding.btnJoin.text =
             if (mJoinSuccess) getText(R.string.leave) else getText(R.string.join)
@@ -554,7 +604,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     override fun onUserOffline(uid: Int, reason: Int) {
     }
 
-    override fun onAudioVolumeIndication(speakers: ArrayList<AudioVolumeInfo>, totalVolume: Int) {
+    override fun onAudioVolumeIndication(
+        speakers: ArrayList<AudioVolumeInfo>,
+        totalVolume: Int
+    ) {
         //Log.d(TAG, "onAudioVolumeIndication speakers:$speakers totalVolume:$totalVolume")
     }
 
@@ -637,7 +690,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
 
         // 将视图绘制到 Bitmap
-        view.draw(android.graphics.Canvas(bitmap))
+        view.draw(Canvas(bitmap))
 
         // 计算需要的字节数
         val bytes = bitmap.byteCount
@@ -658,6 +711,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     private fun updateHistoryUI(message: String) {
+        Log.d(TAG, message)
         runOnUiThread {
             binding.tvHistory.append("\r\n$message")
             val scrollAmount =

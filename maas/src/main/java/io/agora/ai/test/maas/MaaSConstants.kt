@@ -160,5 +160,22 @@ class MaaSConstants {
         }
     }
 
+    enum class ViewFrameType(val value: Int) {
+        I420(0),
+        NV21(1),
+        NV12(2);
+
+        companion object {
+            fun getViewFrameType(type: Int): ViewFrameType? {
+                for (viewFrameType in ViewFrameType.entries) {
+                    if (viewFrameType.value == type) {
+                        return viewFrameType
+                    }
+                }
+                return null
+            }
+        }
+    }
+
 
 }

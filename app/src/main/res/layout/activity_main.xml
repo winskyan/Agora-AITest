@@ -150,6 +150,14 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btn_send_stream_message" />
 
+    <Button
+        android:id="@+id/btn_send_yuv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/send_yuv"
+        app:layout_constraintStart_toEndOf="@id/btn_send_rtm_message"
+        app:layout_constraintTop_toBottomOf="@id/btn_send_stream_message" />
+
     <TextView
         android:id="@+id/tv_history"
         android:layout_width="0dp"

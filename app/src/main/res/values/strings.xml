@@ -12,6 +12,7 @@
     <string name="send_stream_message">Send Stream Message</string>
     <string name="send_audio_metadata">Send Audio metadata</string>
     <string name="send_rtm_message">Send Rtm Message</string>
+    <string name="send_yuv">Send Yuv</string>
     <string name="clear">Clear</string>
     <string name="settings">Settings</string>
     <string name="ok" translatable="false">OK</string>
@@ -25,12 +26,12 @@
     <string name="enable_rtc_data_stream_test">Enable Rtc Data Stream Loop Send Test</string>
     <string name="enable_rtc_audio_meta_data_test">Enable Rtc AudioMeta Loop Send Test</string>
     <string name="enable_rtm_message_test">Enable Rtm Message Loop Send Test</string>
+    <string name="enable_push_external_video">Enable Push External Video</string>
     <string name="client_role_type">Role</string>
     <string name="client_role_type_broadcaster">Broadcaster</string>
     <string name="client_role_type_audience">Audience</string>
     <string name="app_id">APP ID</string>
     <string name="rtc_token">Rtc Token</string>
     <string name="app_certificate">APP CERTIFICATE</string>
-
 
 </resources>

@@ -1,5 +1,6 @@
 package io.agora.ai.test.ui.dialog
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.view.View
@@ -36,6 +37,7 @@ object SettingsDialog {
                     return R.layout.dialog_settings;
                 }
 
+                @SuppressLint("SetTextI18n")
                 override fun initPopupContent() {
                     super.initPopupContent()
                     val binding = DialogSettingsBinding.bind(popupImplView)
@@ -121,6 +123,19 @@ object SettingsDialog {
                     binding.enableRtmMessageTestCb.isChecked = DemoContext.enableTestRtmMessage
                     binding.enableRtmMessageTestCb.setOnCheckedChangeListener { _, isChecked ->
                         DemoContext.enableTestRtmMessage = isChecked
+                    }
+
+                    binding.enablePushExternalVideoCb.isChecked =
+                        DemoContext.enablePushExternalVideo
+                    binding.enablePushExternalVideoCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enablePushExternalVideo = isChecked
+                    }
+
+                    binding.fpsEt.setText(DemoContext.fps.toString())
+                    binding.fpsEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.fps = binding.fpsEt.text.toString().toFloat()
+                        }
                     }
 
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)

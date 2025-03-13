@@ -19,5 +19,7 @@ object Constants {
     const val MMKV_KEY_APP_ID = "appId"
     const val MMKV_KEY_RTC_TOKEN = "rtcToken"
     const val MMKV_KEY_APP_CERTIFICATE = "appCertificate"
+    const val MMKV_KEY_ENABLE_PUSH_EXTERNAL_VIDEO = "enablePushExternalVideo"
+    const val MMKV_KEY_FPS = "fps"
 
 }

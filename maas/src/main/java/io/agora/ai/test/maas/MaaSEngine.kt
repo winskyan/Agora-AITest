@@ -3,6 +3,7 @@ package io.agora.ai.test.maas
 import android.view.View
 import androidx.annotation.Keep
 import io.agora.ai.test.maas.internal.MaaSEngineInternal
+import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
 import java.nio.ByteBuffer
@@ -13,8 +14,7 @@ abstract class MaaSEngine {
     abstract fun joinChannel(
         channelId: String,
         roleType: Int = MaaSConstants.CLIENT_ROLE_BROADCASTER,
-        registerRecordingAudio: Boolean = false,
-        registerPlaybackAudio: Boolean = false
+        joinChannelConfig: JoinChannelConfig
     ): Int
 
     abstract fun leaveChannel(): Int
@@ -66,6 +66,12 @@ abstract class MaaSEngine {
     abstract fun sendAudioMetadata(metadata: ByteArray): Int
 
     abstract fun sendRtmMessage(message: ByteArray, channelType: MaaSConstants.RtmChannelType): Int
+    abstract fun pushVideoFrame(
+        data: ByteArray,
+        width: Int,
+        height: Int,
+        type: MaaSConstants.ViewFrameType
+    ): Int
 
     protected abstract fun doDestroy()
 

@@ -7,8 +7,11 @@ import io.agora.ai.test.maas.MaaSEngine
 import io.agora.ai.test.maas.MaaSEngineEventHandler
 import io.agora.ai.test.maas.internal.rtm.RtmManager
 import io.agora.ai.test.maas.internal.utils.Utils
+import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
+import io.agora.base.JavaI420Buffer
+import io.agora.base.VideoFrame
 import io.agora.rtc2.ChannelMediaOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.DataStreamConfig
@@ -38,6 +41,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mEventCallback: MaaSEngineEventHandler? = null
     private var mDataStreamId: Int = -1
     private var mAudioFileName = ""
+
+    private var mVideoTrackerId = 0
 
     private val executor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val scope = CoroutineScope(executor)
@@ -229,10 +234,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
 
     private fun registerAudioFrame(
-        registerRecordingAudio: Boolean,
-        registerPlaybackAudio: Boolean
+        enableStereoTest: Boolean,
+        enableSaveAudio: Boolean
     ) {
-        if (!registerRecordingAudio && !registerPlaybackAudio) {
+        if (!enableStereoTest && !enableSaveAudio) {
             return
         }
 
@@ -241,7 +246,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return
         }
 
-        if (registerRecordingAudio) {
+        if (enableStereoTest) {
             mRtcEngine?.setRecordingAudioFrameParameters(
                 16000,
                 2,
@@ -250,7 +255,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             )
         }
 
-        if (registerPlaybackAudio) {
+        if (enableSaveAudio) {
             mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
                 16000,
                 2
@@ -356,19 +361,29 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     override fun joinChannel(
         channelId: String,
         roleType: Int,
-        registerRecordingAudio: Boolean,
-        registerPlaybackAudio: Boolean
+        joinChannelConfig: JoinChannelConfig
     ): Int {
         Log.d(
             MaaSConstants.TAG,
-            "joinChannel channelId:$channelId roleType:$roleType registerRecordingAudio:$registerRecordingAudio registerPlaybackAudio:$registerPlaybackAudio"
+            "joinChannel channelId:$channelId roleType:$roleType joinChannelConfig:$joinChannelConfig"
         )
         if (mRtcEngine == null) {
             Log.e(MaaSConstants.TAG, "joinChannel error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
         try {
-            registerAudioFrame(registerRecordingAudio, registerPlaybackAudio)
+            registerAudioFrame(
+                joinChannelConfig.enableStereoTest,
+                joinChannelConfig.enableSaveAudio
+            )
+
+            if (joinChannelConfig.enablePushExternalVideo) {
+                mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
+                Log.d(
+                    MaaSConstants.TAG,
+                    "createCustomVideoTrack mVideoTrackerId:$mVideoTrackerId"
+                )
+            }
 
             val ret = mMaaSEngineConfiguration?.userId?.let {
                 mAudioFileName +=
@@ -383,6 +398,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                         init {
                             autoSubscribeAudio = true
                             autoSubscribeVideo = true
+                            publishCustomVideoTrack = joinChannelConfig.enablePushExternalVideo
+                            customVideoTrackId = mVideoTrackerId
                             clientRoleType = roleType
                         }
                     })
@@ -420,6 +437,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
         if (mMaaSEngineConfiguration?.enableRtm == true) {
             RtmManager.leaveChannel()
+        }
+
+        if (mVideoTrackerId != 0) {
+            mRtcEngine?.destroyCustomVideoTrack(mVideoTrackerId)
+            mVideoTrackerId = 0
         }
         return MaaSConstants.OK
     }
@@ -764,6 +786,67 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
         return MaaSConstants.OK
+    }
+
+
+    override fun pushVideoFrame(
+        data: ByteArray,
+        width: Int,
+        height: Int,
+        type: MaaSConstants.ViewFrameType
+    ): Int {
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "pushVideoFrame error: not initialized")
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+        var videoFrame: VideoFrame? = null
+        when (type) {
+            MaaSConstants.ViewFrameType.I420 -> {
+                val i420Buffer = JavaI420Buffer.allocate(width, height)
+                i420Buffer.dataY.put(data, 0, i420Buffer.dataY.limit())
+                i420Buffer.dataU.put(data, i420Buffer.dataY.limit(), i420Buffer.dataU.limit())
+                i420Buffer.dataV.put(
+                    data,
+                    i420Buffer.dataY.limit() + i420Buffer.dataU.limit(),
+                    i420Buffer.dataV.limit()
+                )
+
+                /*
+              * Get monotonic time in ms which can be used by capture time,
+              * typical scenario is as follows:
+              */
+                val currentMonotonicTimeInMs: Long = mRtcEngine?.currentMonotonicTimeInMs ?: 0
+                /*
+                 * Create a video frame to push.
+                 */
+                videoFrame = VideoFrame(i420Buffer, 0, currentMonotonicTimeInMs * 1000000)
+
+                val ret = pushExternalVideoFrameByIdInternal(videoFrame, mVideoTrackerId)
+                i420Buffer.release()
+                return ret
+            }
+
+            MaaSConstants.ViewFrameType.NV21 -> TODO()
+            MaaSConstants.ViewFrameType.NV12 -> TODO()
+        }
+    }
+
+    private fun pushExternalVideoFrameByIdInternal(videoFrame: VideoFrame, trackId: Int): Int {
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "pushExternalVideoFrameByIdInternal error: not initialized")
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+        val ret = mRtcEngine?.pushExternalVideoFrameById(videoFrame, trackId)
+        Log.d(
+            MaaSConstants.TAG,
+            "pushExternalVideoFrameByIdInternal ret:$ret"
+        )
+        return if (ret == 0) {
+            MaaSConstants.OK
+        } else {
+            Log.e(MaaSConstants.TAG, "pushExternalVideoFrameByIdInternal error: $ret")
+            MaaSConstants.ERROR_GENERIC
+        }
     }
 
     override fun close() {

@@ -75,6 +75,15 @@ object DemoContext {
         get() = MMKVUtils.getString(Constants.MMKV_KEY_APP_CERTIFICATE, "")
         set(value) = MMKVUtils.putString(Constants.MMKV_KEY_APP_CERTIFICATE, value)
 
+
+    var enablePushExternalVideo: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_PUSH_EXTERNAL_VIDEO, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_PUSH_EXTERNAL_VIDEO, value)
+
+    var fps: Float
+        get() = MMKVUtils.getFloat(Constants.MMKV_KEY_FPS, 15.0f).toFloat()
+        set(value) = MMKVUtils.putFloat(Constants.MMKV_KEY_FPS, value)
+
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type
