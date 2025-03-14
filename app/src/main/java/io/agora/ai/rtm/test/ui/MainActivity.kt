@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
+import io.agora.ai.rtm.test.BuildConfig
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.databinding.ActivityMainBinding
 import io.agora.ai.rtm.test.rtm.RtmManager
@@ -152,6 +153,10 @@ class MainActivity : AppCompatActivity(), RtmManager.RtmMessageListener,
 
     private fun initView() {
         handleOnBackPressed()
+
+        val version = "Version: ${BuildConfig.VERSION_NAME} \r\n RTM: ${RtmManager.getRtmVersion()}"
+
+        binding.tvVersion.text = version
 
         binding.btnStop.setOnClickListener {
             remainingTests = 0

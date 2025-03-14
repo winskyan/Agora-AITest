@@ -22,7 +22,7 @@ android {
         minSdk = 23
         targetSdk = 34
         versionCode = 1
-        versionName = "2.1"
+        versionName = "2.0314.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -87,6 +87,8 @@ android {
 
 
 dependencies {
+    implementation(files("libs/agora-rtm-sdk.jar"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -98,6 +100,6 @@ dependencies {
     implementation(libs.xpopup)
     implementation(libs.agora.authentication)
     implementation(libs.commons.codec)
-    implementation(libs.agora.rtm)
+//    implementation(libs.agora.rtm)
     implementation(libs.okhttp3)
 }

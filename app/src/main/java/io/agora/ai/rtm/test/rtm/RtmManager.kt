@@ -161,4 +161,8 @@ object RtmManager {
         })
         return 0
     }
+
+    fun getRtmVersion(): String {
+        return RtmClient.getVersion()
+    }
 }
