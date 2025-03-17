@@ -324,7 +324,7 @@ class WsTestManager(private val context: Context) {
 
         val averageDiff = "login Connected diff average:${loginConnectedDiffSum / divisor}ms," +
                 "echo message average:${receiverMessageDiffSum / divisor}ms," +
-                "receiver message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
+                "receiver first echo message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
                 "test count:$testCount, success count:$successCount, timeout count:$timeoutCount"
         updateHistoryUI(averageDiff)
     }
