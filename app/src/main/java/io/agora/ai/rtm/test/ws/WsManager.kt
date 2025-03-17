@@ -15,7 +15,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-object WSManager {
+object WsManager {
     private const val TAG = Constants.TAG + "-WSManager"
     private var webSocket: WebSocket? = null
     private var wsListener: WSMessageListener? = null
@@ -32,9 +32,9 @@ object WSManager {
         val sslSocketFactory = sslContext.socketFactory
 
         OkHttpClient.Builder()
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
