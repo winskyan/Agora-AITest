@@ -39,6 +39,10 @@ class WsTestManager(private val context: Context) {
     private var testCount = 0
     private var timeoutCount = 0
 
+    // Timeout handler
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var messageTimeoutRunnable: Runnable? = null
+
     // File output
     private var historyFileName = ""
     private val logExecutor = Executors.newSingleThreadExecutor()
@@ -69,14 +73,22 @@ class WsTestManager(private val context: Context) {
         }
 
         override fun onWSDisconnected() {
+            // Cancel any pending timeouts
+            cancelMessageTimeout()
+
             updateTestAverage()
+
             startWsTestCycle()
+
             testStatusCallback?.onWsTestCycleCompleted()
         }
 
         override fun onWSMessageReceived(message: String) {
             Log.d(TAG, "onWSMessageReceived message:$message")
             if (0L != sendMessageTime && message == sendMessage) {
+                // Cancel message timeout
+                cancelMessageTimeout()
+
                 val currentTime = System.currentTimeMillis()
                 val sendMessageDiff = currentTime - sendMessageTime
 
@@ -169,12 +181,14 @@ class WsTestManager(private val context: Context) {
      */
     fun stopTest() {
         remainingTests = 0
+        cancelMessageTimeout()
     }
 
     /**
      * Release resources
      */
     fun release() {
+        cancelMessageTimeout()
         closeWriter()
         logExecutor.shutdown()
         WsManager.release()
@@ -263,6 +277,7 @@ class WsTestManager(private val context: Context) {
      * Logout from WebSocket
      */
     private fun logoutWs() {
+        cancelMessageTimeout()
         WsManager.release()
     }
 
@@ -273,6 +288,9 @@ class WsTestManager(private val context: Context) {
         remainInChannelTestCount--
         sendMessageTime = System.currentTimeMillis()
         sendMessage = "wsMessage$sendMessageTime"
+
+        // Start message timeout
+        startMessageTimeout()
 
         // Using WsManager's built-in timeout settings (5 seconds)
         val success = WsManager.sendMessage(sendMessage)
@@ -298,10 +316,16 @@ class WsTestManager(private val context: Context) {
      * Update test average statistics
      */
     private fun updateTestAverage() {
-        val averageDiff = "login Connected diff average:${loginConnectedDiffSum / testCount}ms," +
-                "echo message average:${receiverMessageDiffSum / testCount}ms," +
-                "receiver message from login average:${receiverMessageFromLoginDiffSum / testCount}ms," +
-                "test count:$testCount, timeout count:$timeoutCount"
+        // Calculate actual successful test count (total tests minus timeout count)
+        val successCount = if (testCount > timeoutCount) testCount - timeoutCount else 1
+
+        // If success count is 0, use 1 as divisor to avoid division by zero error
+        val divisor = if (successCount > 0) successCount else 1
+
+        val averageDiff = "login Connected diff average:${loginConnectedDiffSum / divisor}ms," +
+                "echo message average:${receiverMessageDiffSum / divisor}ms," +
+                "receiver message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
+                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount"
         updateHistoryUI(averageDiff)
     }
 
@@ -329,16 +353,42 @@ class WsTestManager(private val context: Context) {
     }
 
     /**
+     * Start message timeout timer
+     */
+    private fun startMessageTimeout() {
+        cancelMessageTimeout()
+
+        messageTimeoutRunnable = Runnable {
+            handleTestFailure("Message receive timeout")
+        }
+
+        mainHandler.postDelayed(
+            messageTimeoutRunnable!!,
+            Constants.INTERVAL_RECEIVER_MESSAGE_TIMEOUT
+        )
+    }
+
+    /**
+     * Cancel message timeout
+     */
+    private fun cancelMessageTimeout() {
+        messageTimeoutRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            messageTimeoutRunnable = null
+        }
+    }
+
+    /**
      * Handle test failure (timeout or error)
      */
     private fun handleTestFailure(reason: String) {
         timeoutCount++
         updateHistoryUI("Test failed: $reason")
 
+        // Cancel any pending timeouts
+        cancelMessageTimeout()
+
         // Close current connection
         WsManager.release()
-
-        // Start next test
-        startWsTestCycle()
     }
-} 
+}

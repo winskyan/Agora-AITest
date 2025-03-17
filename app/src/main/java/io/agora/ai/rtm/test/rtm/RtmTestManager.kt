@@ -38,6 +38,11 @@ class RtmTestManager(private val context: Context) {
     private var receiverMessageFromLoginDiffSum = 0L
     private var receiverMessageInChannelDiffSum = 0L
     private var testCount = 0
+    private var timeoutCount = 0
+
+    // Timeout handler
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var messageTimeoutRunnable: Runnable? = null
 
     // File output
     private var historyFileName = ""
@@ -59,6 +64,9 @@ class RtmTestManager(private val context: Context) {
         override fun onRtmMessageReceived(message: String) {
             Log.d(TAG, "onRtmMessageReceived message:$message")
             if (0L != sendMessageTime && message == sendMessage) {
+                // Cancel message timeout
+                cancelMessageTimeout()
+
                 val currentTime = System.currentTimeMillis()
                 val sendRtmMessageDiff = currentTime - sendMessageTime
                 receiverMessageInChannelDiffSum += sendRtmMessageDiff
@@ -102,6 +110,8 @@ class RtmTestManager(private val context: Context) {
         }
 
         override fun onRtmDisconnected() {
+            // Cancel any pending timeouts
+            cancelMessageTimeout()
             updateTestAverage()
             startRtmTestCycle()
             testStatusCallback?.onRtmTestCycleCompleted()
@@ -146,6 +156,7 @@ class RtmTestManager(private val context: Context) {
      */
     fun startTest(testCount: Int = Constants.DEFAULT_TEST_COUNT) {
         remainingTests = testCount
+        timeoutCount = 0
 
         // Initialize history file
         historyFileName =
@@ -165,12 +176,14 @@ class RtmTestManager(private val context: Context) {
      */
     fun stopTest() {
         remainingTests = 0
+        cancelMessageTimeout()
     }
 
     /**
      * Release resources
      */
     fun release() {
+        cancelMessageTimeout()
         closeWriter()
         logExecutor.shutdown()
         RtmManager.release()
@@ -237,7 +250,7 @@ class RtmTestManager(private val context: Context) {
                 loginRtm()
             }, delayTime)
         } else {
-            val message = "Rtm Test End"
+            val message = "Rtm Test End (Success: $testCount, Timeout/Failed: $timeoutCount)"
             updateHistoryUI(message)
             testStatusCallback?.onRtmTestCompleted()
         }
@@ -257,6 +270,7 @@ class RtmTestManager(private val context: Context) {
      * Logout from RTM
      */
     private fun logoutRtm() {
+        cancelMessageTimeout()
         RtmManager.unsubscribeMessageChannel(channelName)
         RtmManager.rtmLogout()
     }
@@ -269,9 +283,13 @@ class RtmTestManager(private val context: Context) {
         sendMessageTime = System.currentTimeMillis()
         sendMessage = "rtmMessage$sendMessageTime"
 
+        // Start message timeout
+        startMessageTimeout()
+
         val ret = RtmManager.sendRtmMessage(sendMessage.toByteArray(Charsets.UTF_8), channelName)
         if (ret != 0) {
             Log.e(TAG, "sendRtmMessage failed")
+            handleTestFailure("Failed to send message")
             return
         }
         updateHistoryUI("SendRtmMessage:$sendMessage")
@@ -291,10 +309,16 @@ class RtmTestManager(private val context: Context) {
      * Update test average statistics
      */
     private fun updateTestAverage() {
-        val averageDiff = "login Connected diff average:${loginConnectedDiffSum / testCount}ms," +
-                "echo message average:${receiverMessageDiffSum / testCount}ms," +
-                "receiver first echo message from login average:${receiverMessageFromLoginDiffSum / testCount}ms," +
-                "test count:$testCount"
+        // Calculate actual successful test count (total tests minus timeout count)
+        val successCount = if (testCount > timeoutCount) testCount - timeoutCount else 1
+
+        // If success count is 0, use 1 as divisor to avoid division by zero error
+        val divisor = if (successCount > 0) successCount else 1
+
+        val averageDiff = "login Connected diff average:${loginConnectedDiffSum / divisor}ms," +
+                "echo message average:${receiverMessageDiffSum / divisor}ms," +
+                "receiver first echo message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
+                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount"
         updateHistoryUI(averageDiff)
     }
 
@@ -319,5 +343,46 @@ class RtmTestManager(private val context: Context) {
                 Log.e(TAG, "Error writing message to file", e)
             }
         }
+    }
+
+    /**
+     * Start message timeout timer
+     */
+    private fun startMessageTimeout() {
+        cancelMessageTimeout()
+
+        messageTimeoutRunnable = Runnable {
+            handleTestFailure("Message receive timeout")
+        }
+
+        mainHandler.postDelayed(
+            messageTimeoutRunnable!!,
+            Constants.INTERVAL_RECEIVER_MESSAGE_TIMEOUT
+        )
+    }
+
+    /**
+     * Cancel message timeout
+     */
+    private fun cancelMessageTimeout() {
+        messageTimeoutRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            messageTimeoutRunnable = null
+        }
+    }
+
+    /**
+     * Handle test failure (timeout or error)
+     */
+    private fun handleTestFailure(reason: String) {
+        timeoutCount++
+        updateHistoryUI("Test failed: $reason")
+
+        // Cancel any pending timeouts
+        cancelMessageTimeout()
+
+        // Logout from RTM
+        RtmManager.unsubscribeMessageChannel(channelName)
+        RtmManager.rtmLogout()
     }
 } 
