@@ -32,9 +32,9 @@ object WsManager {
         val sslSocketFactory = sslContext.socketFactory
 
         OkHttpClient.Builder()
-            .readTimeout(5, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
-            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
@@ -54,8 +54,31 @@ object WsManager {
     }
 
     fun release() {
-        webSocket?.close(1000, "正常关闭")
-        webSocket = null
+        try {
+            // Save current WebSocket reference
+            val currentWebSocket = webSocket
+
+            // Clear reference to prevent duplicate calls
+            webSocket = null
+
+            // If WebSocket exists, attempt normal closure
+            if (currentWebSocket != null) {
+                // Try normal close first
+                val normalCloseSent = currentWebSocket.close(1000, "Normal Close")
+
+                // If normal close fails, force cancel and trigger disconnect event
+                if (!normalCloseSent) {
+                    Log.w(TAG, "Normal close failed, forcing cancel")
+                    currentWebSocket.cancel()
+                    // Only trigger disconnect event on forced cancel
+                    wsListener?.onWSDisconnected()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during WebSocket release", e)
+            // Trigger disconnect event on exception
+            wsListener?.onWSDisconnected()
+        }
     }
 
     fun connect(url: String) {

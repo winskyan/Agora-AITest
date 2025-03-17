@@ -48,6 +48,12 @@ class WsTestManager(private val context: Context) {
     private val logExecutor = Executors.newSingleThreadExecutor()
     private var bufferedWriter: BufferedWriter? = null
 
+    // Variable to store disconnect protection Runnable
+    private var disconnectProtectionRunnable: Runnable? = null
+
+    // Flag for handling disconnect event
+    private var isHandlingDisconnect = false
+
     // Callbacks
     interface TestStatusCallback {
         fun onWsTestStarted()
@@ -73,14 +79,28 @@ class WsTestManager(private val context: Context) {
         }
 
         override fun onWSDisconnected() {
-            // Cancel any pending timeouts
-            cancelMessageTimeout()
+            // Check if already handling disconnect event
+            if (isHandlingDisconnect) {
+                Log.w(TAG, "Already handling disconnect event, ignoring duplicate")
+                return
+            }
 
-            updateTestAverage()
+            isHandlingDisconnect = true
 
-            startWsTestCycle()
+            try {
+                // Cancel any pending timeouts
+                cancelMessageTimeout()
 
-            testStatusCallback?.onWsTestCycleCompleted()
+                // Cancel disconnect protection
+                cancelDisconnectProtection()
+
+                updateTestAverage()
+                startWsTestCycle()
+                testStatusCallback?.onWsTestCycleCompleted()
+            } finally {
+                // Ensure flag is reset after handling
+                isHandlingDisconnect = false
+            }
         }
 
         override fun onWSMessageReceived(message: String) {
@@ -242,6 +262,9 @@ class WsTestManager(private val context: Context) {
      * Start WebSocket test cycle
      */
     private fun startWsTestCycle(firstTest: Boolean = false) {
+        // Reset disconnect handling flag when starting new test cycle
+        isHandlingDisconnect = false
+
         if (remainingTests > 0) {
             var delayTime = Constants.INTERVAL_LOOP_WAIT
             if (firstTest) {
@@ -390,5 +413,33 @@ class WsTestManager(private val context: Context) {
 
         // Close current connection
         WsManager.release()
+
+        // Add force disconnect protection, trigger next test cycle if no onWSDisconnected callback within 5 seconds
+        val forceDisconnectRunnable = Runnable {
+            Log.w(TAG, "Force disconnect protection triggered")
+            isHandlingDisconnect = true
+
+            updateTestAverage()
+            startWsTestCycle()
+            testStatusCallback?.onWsTestCycleCompleted()
+        }
+
+        mainHandler.postDelayed(
+            forceDisconnectRunnable,
+            5000
+        ) // Trigger protection mechanism after 5 seconds
+
+        // Save current protection Runnable for cancellation on normal disconnect
+        disconnectProtectionRunnable = forceDisconnectRunnable
+    }
+
+    /**
+     * Cancel disconnect protection
+     */
+    private fun cancelDisconnectProtection() {
+        disconnectProtectionRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            disconnectProtectionRunnable = null
+        }
     }
 }
