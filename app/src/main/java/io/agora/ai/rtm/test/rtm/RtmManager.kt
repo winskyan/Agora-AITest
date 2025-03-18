@@ -93,6 +93,7 @@ object RtmManager {
                 init {
                     withMessage = true
                     withPresence = false
+                    isBeQuiet = true
                 }
             },
             object : ResultCallback<Void> {
