@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import io.agora.ai.rtm.test.BuildConfig
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.utils.KeyCenter
 import java.io.BufferedWriter
@@ -162,6 +163,9 @@ class RtmTestManager(private val context: Context) {
         historyFileName =
             "history-rtm-${channelName}-${KeyCenter.getRtmUid()}-${System.currentTimeMillis()}.txt"
         initWriter()
+
+        writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
+        writeMessageToFile("RTM version: ${RtmManager.getRtmVersion()}", false)
 
         // Reset statistics
         resetTestStats()
@@ -326,18 +330,28 @@ class RtmTestManager(private val context: Context) {
      * Update history UI and write to file
      */
     private fun updateHistoryUI(message: String) {
-        Log.d(TAG, message)
-        testStatusCallback?.onRtmTestProgress(message)
-        writeMessageToFile(message)
+        // Add timestamp to log message
+        val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
+        val timestampedMessage = "$timestamp: $message"
+
+        Log.d(TAG, timestampedMessage)
+        testStatusCallback?.onRtmTestProgress(timestampedMessage) // Send timestamped message to UI
+        writeMessageToFile(message) // The timestamp is added in writeMessageToFile method
     }
 
     /**
      * Write message to file
      */
-    private fun writeMessageToFile(message: String) {
+    private fun writeMessageToFile(message: String, withTimestamp: Boolean = true) {
         logExecutor.execute {
             try {
-                bufferedWriter?.append(message)?.append("\n")
+                if (withTimestamp) {
+                    // Add timestamp with yyyy-MM-dd HH:mm:ss.SSS format
+                    val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
+                    bufferedWriter?.append("$timestamp: $message")?.append("\n")
+                } else {
+                    bufferedWriter?.append(message)?.append("\n")
+                }
                 bufferedWriter?.flush()
             } catch (e: IOException) {
                 Log.e(TAG, "Error writing message to file", e)
