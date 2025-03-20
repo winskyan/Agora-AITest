@@ -4,6 +4,7 @@
     <string name="ws_test">Ws Test</string>
     <string name="channel_name">Channel Name</string>
     <string name="ws_url">ws url</string>
-    <string name="custom_test_count">Test Count(100)</string>
+    <string name="custom_test_count">Count(100)</string>
+    <string name="custom_sleep_time">Sleep(10)s</string>
     <string name="stop">Stop</string>
 </resources>

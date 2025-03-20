@@ -7,6 +7,7 @@ import android.util.Log
 import io.agora.ai.rtm.test.BuildConfig
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.utils.KeyCenter
+import io.agora.ai.rtm.test.utils.Utils
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -49,6 +50,10 @@ class RtmTestManager(private val context: Context) {
     private var historyFileName = ""
     private val logExecutor = Executors.newSingleThreadExecutor()
     private var bufferedWriter: BufferedWriter? = null
+
+    private var loopSleepTime = Constants.INTERVAL_LOOP_WAIT
+
+    private var userId = ""
 
     // Callbacks
     interface TestStatusCallback {
@@ -130,16 +135,17 @@ class RtmTestManager(private val context: Context) {
      */
     fun initialize(
         callback: TestStatusCallback,
+        context: Context,
         rtmListener: RtmManager.RtmMessageListener? = null
     ) {
         this.testStatusCallback = callback
-
+        userId = Utils.generateUniqueRandom(context);
         // Initialize RTM Manager with our internal listener
-        RtmManager.create(KeyCenter.APP_ID, KeyCenter.getRtmUid().toString(), internalRtmListener)
+        RtmManager.create(KeyCenter.APP_ID, userId, internalRtmListener)
 
         Log.d(
             TAG,
-            "RTM initialized with APP_ID: ${KeyCenter.APP_ID}, UID: ${KeyCenter.getRtmUid()}"
+            "RTM initialized with APP_ID: ${KeyCenter.APP_ID}, UID: $userId"
         )
     }
 
@@ -155,13 +161,17 @@ class RtmTestManager(private val context: Context) {
     /**
      * Start RTM test with specified count
      */
-    fun startTest(testCount: Int = Constants.DEFAULT_TEST_COUNT) {
+    fun startTest(
+        testCount: Int = Constants.DEFAULT_TEST_COUNT,
+        loopSleepTime: Long = Constants.INTERVAL_LOOP_WAIT
+    ) {
         remainingTests = testCount
+        this.loopSleepTime = loopSleepTime
         timeoutCount = 0
 
         // Initialize history file
         historyFileName =
-            "history-rtm-${channelName}-${KeyCenter.getRtmUid()}-${System.currentTimeMillis()}.txt"
+            "history-rtm-${channelName}-${userId}-${System.currentTimeMillis()}.txt"
         initWriter()
 
         writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
@@ -242,7 +252,7 @@ class RtmTestManager(private val context: Context) {
      */
     private fun startRtmTestCycle(firstTest: Boolean = false) {
         if (remainingTests > 0) {
-            var delayTime = Constants.INTERVAL_LOOP_WAIT
+            var delayTime = loopSleepTime
             if (firstTest) {
                 delayTime = 0
             }
@@ -265,9 +275,9 @@ class RtmTestManager(private val context: Context) {
      */
     private fun loginRtm() {
         updateLoginTime()
-        val message = "loginRtm channel:$channelName uid:${KeyCenter.getRtmUid()}"
+        val message = "loginRtm channel:$channelName uid:${userId}"
         updateHistoryUI(message)
-        RtmManager.login(KeyCenter.getRtmToken2(KeyCenter.getRtmUid()))
+        RtmManager.login("")
     }
 
     /**

@@ -44,7 +44,10 @@ class MainActivity : AppCompatActivity(),
 
         // Initialize RTM Test Manager
         rtmTestManager = RtmTestManager(applicationContext)
-        rtmTestManager.initialize(this) // Initialize RTM with this as the callback
+        rtmTestManager.initialize(
+            this,
+            applicationContext
+        ) // Initialize RTM with this as the callback
 
         // Initialize WebSocket Test Manager
         wsTestManager = WsTestManager(applicationContext)
@@ -127,6 +130,10 @@ class MainActivity : AppCompatActivity(),
             val testCount =
                 if (customCount.isEmpty()) Constants.DEFAULT_TEST_COUNT else customCount.toInt()
 
+            val sleepTime = binding.etCustomSleepTime.text.toString()
+            val loopSleepTime =
+                if (sleepTime.isEmpty()) Constants.INTERVAL_LOOP_WAIT else sleepTime.toInt() * 1000L
+
             // Start RTM test
             runOnUiThread { binding.btnRtmTest.isEnabled = false }
 
@@ -134,7 +141,7 @@ class MainActivity : AppCompatActivity(),
             dnsTestManager.startTest()
 
             // Start RTM test
-            rtmTestManager.startTest(testCount)
+            rtmTestManager.startTest(testCount, loopSleepTime)
         }
 
         binding.btnWsTest.setOnClickListener {
@@ -148,11 +155,15 @@ class MainActivity : AppCompatActivity(),
             val testCount =
                 if (customCount.isEmpty()) Constants.DEFAULT_TEST_COUNT else customCount.toInt()
 
+            val sleepTime = binding.etCustomSleepTime.text.toString()
+            val loopSleepTime =
+                if (sleepTime.isEmpty()) Constants.INTERVAL_LOOP_WAIT else sleepTime.toInt() * 1000L
+
             // Start WebSocket test
             runOnUiThread { binding.btnWsTest.isEnabled = false }
 
             // Start WebSocket test
-            wsTestManager.startTest(testCount)
+            wsTestManager.startTest(testCount, loopSleepTime)
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()

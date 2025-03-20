@@ -31,6 +31,7 @@ object RtmManager {
         mRtmMessageListener = listener
         val rtmConfig =
             RtmConfig.Builder(appId, rtmUserId)
+                .useStringUserId(true)
                 .eventListener(object : RtmEventListener {
 
                     override fun onLinkStateEvent(event: LinkStateEvent?) {

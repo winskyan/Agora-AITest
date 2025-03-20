@@ -8,7 +8,7 @@ object Constants {
     const val LOG_FILE_NAME = "agora.AITest"
 
     const val DEFAULT_TEST_COUNT = 100
-    const val MAX_IN_CHANNEL_TEST_COUNT = 20
+    const val MAX_IN_CHANNEL_TEST_COUNT = 1
     const val INTERVAL_LOOP_WAIT = 10 * 1000L
     const val INTERVAL_RECEIVER_MESSAGE_TIMEOUT = 5 * 1000L
     

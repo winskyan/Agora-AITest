@@ -56,6 +56,8 @@ class WsTestManager(private val context: Context) {
     // Flag for handling disconnect event
     private var isHandlingDisconnect = false
 
+    private var loopSleepTime = Constants.INTERVAL_LOOP_WAIT
+
     // Callbacks
     interface TestStatusCallback {
         fun onWsTestStarted()
@@ -182,8 +184,12 @@ class WsTestManager(private val context: Context) {
     /**
      * Start WebSocket test with specified count
      */
-    fun startTest(testCount: Int = Constants.DEFAULT_TEST_COUNT) {
+    fun startTest(
+        testCount: Int = Constants.DEFAULT_TEST_COUNT,
+        loopSleepTime: Long = Constants.INTERVAL_LOOP_WAIT
+    ) {
         remainingTests = testCount
+        this.loopSleepTime = loopSleepTime
         timeoutCount = 0
 
         // Initialize history file
@@ -271,7 +277,7 @@ class WsTestManager(private val context: Context) {
         isHandlingDisconnect = false
 
         if (remainingTests > 0) {
-            var delayTime = Constants.INTERVAL_LOOP_WAIT
+            var delayTime = loopSleepTime
             if (firstTest) {
                 delayTime = 0
             }
