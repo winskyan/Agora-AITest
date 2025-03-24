@@ -45,6 +45,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
         fun onRtcTestStarted()
         fun onRtcTestProgress(message: String)
         fun onRtcTestCompleted()
+        fun onRecordAudioFrame(data: ByteArray?)
     }
 
     fun initialize(
@@ -117,16 +118,14 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
         writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
         writeMessageToFile("RTC version: ${RtcManager.getRtcVersion()}", false)
 
-        writeMessageToFile("joinChannel channel: $channelName")
+        updateHistoryUI("joinChannel channel: $channelName")
         // Initialize history file
         RtcManager.joinChannel("", channelName, 0, io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER)
     }
 
     fun stopTest() {
         if (joinChannelSuccess) {
-            joinChannelSuccess = false
-
-            writeMessageToFile("leaveChannel")
+            updateHistoryUI("leaveChannel")
             RtcManager.leaveChannel()
             updateTestAverage()
         }
@@ -137,7 +136,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
     @Synchronized
     private fun sendAudioFrame(data: ByteArray) {
         if (!joinChannelSuccess) {
-            Log.d(TAG, "sendAudioFrame: not in channel")
+            Log.i(TAG, "sendAudioFrame: not in channel")
             return
         }
         if (data.isEmpty()) {
@@ -203,6 +202,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
         closeWriter()
         pendingAudioDataByteBuffer?.clear()
         pendingAudioDataByteBuffer = null
+        logExecutor.shutdown()
         RtcManager.destroy()
     }
 
@@ -255,7 +255,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
                         val avgDiff = receiverMessageDiffSum / audioMetaDataReceiveCount
 
                         writeMessageToFile(
-                            "Receive audio meta data: ${parts[0]}-[audio_data], diff: ${diff}ms " +
+                            "Receive audio meta data: ${audioMetaData}, diff: ${diff}ms " +
                                     "Average diff: ${avgDiff}ms sendCount: $audioMetaDataSendCount " +
                                     "receiveCount: $audioMetaDataReceiveCount"
                         )
@@ -274,6 +274,10 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
     }
 
     override fun onRecordAudioFrame(data: ByteArray?) {
+        CoroutineScope(Dispatchers.Default).launch {
+            testStatusCallback?.onRecordAudioFrame(data)
+        }
+
         CoroutineScope(Dispatchers.Default).launch {
             sendAudioFrame(data ?: ByteArray(0))
         }

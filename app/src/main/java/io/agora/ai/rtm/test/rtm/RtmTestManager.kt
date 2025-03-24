@@ -25,7 +25,7 @@ class RtmTestManager(private val context: Context) {
     }
 
     // Test configuration
-    private var channelName = "wei888"
+    private var channelName = ""
     private var remainingTests = 0
     private var remainInChannelTestCount = 0
 
@@ -150,28 +150,21 @@ class RtmTestManager(private val context: Context) {
     }
 
     /**
-     * Set channel name for RTM test
-     */
-    fun setChannelName(name: String) {
-        if (name.isNotEmpty()) {
-            this.channelName = name
-        }
-    }
-
-    /**
      * Start RTM test with specified count
      */
     fun startTest(
+        channelName: String,
         testCount: Int = Constants.DEFAULT_TEST_COUNT,
         loopSleepTime: Long = Constants.INTERVAL_LOOP_WAIT
     ) {
+        this.channelName = channelName
         remainingTests = testCount
         this.loopSleepTime = loopSleepTime
         timeoutCount = 0
 
         // Initialize history file
         historyFileName =
-            "history-rtm-${channelName}-${userId}-${System.currentTimeMillis()}.txt"
+            "history-rtm-${channelName}-${System.currentTimeMillis()}.txt"
         initWriter()
 
         writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)

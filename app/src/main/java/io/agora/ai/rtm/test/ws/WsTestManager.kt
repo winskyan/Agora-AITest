@@ -24,7 +24,7 @@ class WsTestManager(private val context: Context) {
     }
 
     // Test configuration
-    private var wsUrl = "wss://108.129.196.84:8765"
+    private var wsUrl = ""
     private var remainingTests = 0
     private var remainInChannelTestCount = 0
 
@@ -173,21 +173,14 @@ class WsTestManager(private val context: Context) {
     }
 
     /**
-     * Set WebSocket URL for test
-     */
-    fun setWsUrl(url: String) {
-        if (url.isNotEmpty()) {
-            this.wsUrl = url
-        }
-    }
-
-    /**
      * Start WebSocket test with specified count
      */
     fun startTest(
+        wsUrl: String,
         testCount: Int = Constants.DEFAULT_TEST_COUNT,
         loopSleepTime: Long = Constants.INTERVAL_LOOP_WAIT
     ) {
+        this.wsUrl = wsUrl
         remainingTests = testCount
         this.loopSleepTime = loopSleepTime
         timeoutCount = 0

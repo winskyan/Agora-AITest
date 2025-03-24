@@ -16,6 +16,7 @@ import io.agora.ai.rtm.test.rtc.RtcManager
 import io.agora.ai.rtm.test.rtc.RtcTestManager
 import io.agora.ai.rtm.test.rtm.RtmManager
 import io.agora.ai.rtm.test.rtm.RtmTestManager
+import io.agora.ai.rtm.test.ws.WsAudioTestManager
 import io.agora.ai.rtm.test.ws.WsTestManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity(),
     RtmTestManager.TestStatusCallback, WsTestManager.TestStatusCallback,
-    DnsTestManager.TestStatusCallback, RtcTestManager.TestStatusCallback {
+    DnsTestManager.TestStatusCallback, RtcTestManager.TestStatusCallback,
+    WsAudioTestManager.TestStatusCallback {
     companion object {
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
@@ -37,8 +39,10 @@ class MainActivity : AppCompatActivity(),
     private lateinit var wsTestManager: WsTestManager
     private lateinit var dnsTestManager: DnsTestManager
     private lateinit var rtcTestManager: RtcTestManager
+    private lateinit var wsAudioTestManager: WsAudioTestManager
 
-    private var mChannelName = "wei888"
+    private var mRtmChannelName = "wei888"
+    private var mRtcChannelName = "wei999"
     private var mWsUrl = "wss://108.129.196.84:8765"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,6 +71,9 @@ class MainActivity : AppCompatActivity(),
         rtcTestManager.initialize(
             this
         ) // Initialize RTC with this as the callback
+
+        wsAudioTestManager = WsAudioTestManager(applicationContext)
+        wsAudioTestManager.initialize(this)
     }
 
     override fun onDestroy() {
@@ -75,6 +82,7 @@ class MainActivity : AppCompatActivity(),
         wsTestManager.release() // This will also release WSManager
         dnsTestManager.release() // This will also close the DNS log file
         rtcTestManager.release() // This will also release RtcManager
+        wsAudioTestManager.release()
     }
 
     private fun checkPermissions() {
@@ -133,13 +141,23 @@ class MainActivity : AppCompatActivity(),
             rtmTestManager.stopTest()
             wsTestManager.stopTest()
             rtcTestManager.stopTest()
+            wsAudioTestManager.stopTest()
         }
 
         binding.btnRtmTest.setOnClickListener {
-            val channelName = binding.etChannelName.text.toString()
-            if (channelName.isNotEmpty()) {
-                mChannelName = channelName
-                rtmTestManager.setChannelName(channelName)
+            val rtmChannelName = binding.etRtmChannelName.text.toString()
+            if (rtmChannelName.isNotEmpty()) {
+                mRtmChannelName = rtmChannelName
+            }
+
+            val rtcChannelName = binding.etRtcChannelName.text.toString()
+            if (rtcChannelName.isNotEmpty()) {
+                mRtcChannelName = rtcChannelName
+            }
+
+            val wsUrl = binding.etWsUrl.text.toString()
+            if (wsUrl.isNotEmpty()) {
+                mWsUrl = wsUrl
             }
 
             val customCount = binding.etCustomCount.text.toString()
@@ -159,23 +177,40 @@ class MainActivity : AppCompatActivity(),
                     // Perform DNS resolution
                     dnsTestManager.startTest()
 
-                    // Perform RTC test
-                    rtcTestManager.startTest(mChannelName)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error in DNS/RTC test thread", e)
-                    updateHistoryUI("Error in DNS/RTC test: ${e.message}")
+                    Log.e(TAG, "Error in DNS test thread", e)
+                    updateHistoryUI("Error in DNS test: ${e.message}")
+                }
+            }
+
+            CoroutineScope(Dispatchers.Default).launch {
+                try {
+                    // Perform RTC test
+                    rtcTestManager.startTest(mRtcChannelName)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in RTC test thread", e)
+                    updateHistoryUI("Error in RTC test: ${e.message}")
+                }
+            }
+
+            CoroutineScope(Dispatchers.Default).launch {
+                try {
+                    // Perform RTC test
+                    wsAudioTestManager.startTest(mWsUrl)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in ws audio test thread", e)
+                    updateHistoryUI("Error in ws audio test: ${e.message}")
                 }
             }
 
             // Start RTM test immediately
-            rtmTestManager.startTest(testCount, loopSleepTime)
+            rtmTestManager.startTest(mRtmChannelName, testCount, loopSleepTime)
         }
 
         binding.btnWsTest.setOnClickListener {
             val wsUrl = binding.etWsUrl.text.toString()
             if (wsUrl.isNotEmpty()) {
                 mWsUrl = wsUrl
-                wsTestManager.setWsUrl(wsUrl)
             }
 
             val customCount = binding.etCustomCount.text.toString()
@@ -190,7 +225,7 @@ class MainActivity : AppCompatActivity(),
             runOnUiThread { binding.btnWsTest.isEnabled = false }
 
             // Start WebSocket test
-            wsTestManager.startTest(testCount, loopSleepTime)
+            wsTestManager.startTest(mWsUrl, testCount, loopSleepTime)
         }
 
         binding.tvHistory.movementMethod = ScrollingMovementMethod.getInstance()
@@ -234,6 +269,9 @@ class MainActivity : AppCompatActivity(),
         }
         CoroutineScope(Dispatchers.Default).launch {
             rtcTestManager.stopTest()
+        }
+        CoroutineScope(Dispatchers.Default).launch {
+            wsAudioTestManager.stopTest()
         }
     }
 
@@ -291,6 +329,14 @@ class MainActivity : AppCompatActivity(),
         updateHistoryUI("RTC test completed")
     }
 
+    override fun onRecordAudioFrame(data: ByteArray?) {
+        CoroutineScope(Dispatchers.Default).launch {
+            if (data != null) {
+                wsAudioTestManager.sendAudioFrame(data)
+            }
+        }
+    }
+
 
     private fun updateHistoryUI(message: String) {
         runOnUiThread {
@@ -303,6 +349,18 @@ class MainActivity : AppCompatActivity(),
                 binding.tvHistory.scrollTo(0, 0)
             }
         }
+    }
+
+    override fun onWsAudioTestStarted() {
+        Log.d(TAG, "WebSocket audio test started")
+    }
+
+    override fun onWssAudioTestProgress(message: String) {
+        updateHistoryUI(message)
+    }
+
+    override fun onWssAudioTestCompleted() {
+        Log.d(TAG, "WebSocket audio test completed")
     }
 
 

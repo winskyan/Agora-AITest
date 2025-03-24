@@ -88,6 +88,8 @@ object RtcManager {
 
             mRtcEngine?.enableAudio()
 
+            mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
+
             Log.d(
                 TAG, "initRtcEngine success"
             )
@@ -239,7 +241,6 @@ object RtcManager {
                 object : ChannelMediaOptions() {
                     init {
                         autoSubscribeAudio = true
-                        autoSubscribeVideo = true
                         publishMicrophoneTrack = true
                         clientRoleType = roleType
                     }
