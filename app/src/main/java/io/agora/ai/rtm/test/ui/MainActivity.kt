@@ -12,16 +12,21 @@ import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.databinding.ActivityMainBinding
 import io.agora.ai.rtm.test.dns.DnsResolver
 import io.agora.ai.rtm.test.dns.DnsTestManager
+import io.agora.ai.rtm.test.rtc.RtcManager
+import io.agora.ai.rtm.test.rtc.RtcTestManager
 import io.agora.ai.rtm.test.rtm.RtmManager
 import io.agora.ai.rtm.test.rtm.RtmTestManager
 import io.agora.ai.rtm.test.ws.WsTestManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity(),
     RtmTestManager.TestStatusCallback, WsTestManager.TestStatusCallback,
-    DnsTestManager.TestStatusCallback {
+    DnsTestManager.TestStatusCallback, RtcTestManager.TestStatusCallback {
     companion object {
         const val TAG: String = Constants.TAG + "-MainActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
@@ -31,6 +36,7 @@ class MainActivity : AppCompatActivity(),
     private lateinit var rtmTestManager: RtmTestManager
     private lateinit var wsTestManager: WsTestManager
     private lateinit var dnsTestManager: DnsTestManager
+    private lateinit var rtcTestManager: RtcTestManager
 
     private var mChannelName = "wei888"
     private var mWsUrl = "wss://108.129.196.84:8765"
@@ -56,6 +62,11 @@ class MainActivity : AppCompatActivity(),
         // Initialize DNS Test Manager
         dnsTestManager = DnsTestManager(applicationContext)
         dnsTestManager.initialize(this) // Initialize DNS Test Manager with this as the callback
+
+        rtcTestManager = RtcTestManager(applicationContext)
+        rtcTestManager.initialize(
+            this
+        ) // Initialize RTC with this as the callback
     }
 
     override fun onDestroy() {
@@ -63,12 +74,15 @@ class MainActivity : AppCompatActivity(),
         rtmTestManager.release() // This will also release RtmManager
         wsTestManager.release() // This will also release WSManager
         dnsTestManager.release() // This will also close the DNS log file
+        rtcTestManager.release() // This will also release RtcManager
     }
 
     private fun checkPermissions() {
         val permissions =
             arrayOf(
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CAMERA,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
             )
         if (EasyPermissions.hasPermissions(this, *permissions)) {
             // 已经获取到权限，执行相应的操作
@@ -110,13 +124,15 @@ class MainActivity : AppCompatActivity(),
     private fun initView() {
         handleOnBackPressed()
 
-        val version = "Version: ${BuildConfig.VERSION_NAME} \r\n RTM: ${RtmManager.getRtmVersion()}"
+        val version =
+            "Version: ${BuildConfig.VERSION_NAME} \r\n RTM: ${RtmManager.getRtmVersion()} \r\n RTC: ${RtcManager.getRtcVersion()}"
 
         binding.tvVersion.text = version
 
         binding.btnStop.setOnClickListener {
             rtmTestManager.stopTest()
             wsTestManager.stopTest()
+            rtcTestManager.stopTest()
         }
 
         binding.btnRtmTest.setOnClickListener {
@@ -137,10 +153,21 @@ class MainActivity : AppCompatActivity(),
             // Start RTM test
             runOnUiThread { binding.btnRtmTest.isEnabled = false }
 
-            // Perform DNS resolution
-            dnsTestManager.startTest()
+            // Perform DNS resolution and RTC test in separate thread
+            CoroutineScope(Dispatchers.Default).launch {
+                try {
+                    // Perform DNS resolution
+                    dnsTestManager.startTest()
 
-            // Start RTM test
+                    // Perform RTC test
+                    rtcTestManager.startTest(mChannelName)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in DNS/RTC test thread", e)
+                    updateHistoryUI("Error in DNS/RTC test: ${e.message}")
+                }
+            }
+
+            // Start RTM test immediately
             rtmTestManager.startTest(testCount, loopSleepTime)
         }
 
@@ -205,6 +232,9 @@ class MainActivity : AppCompatActivity(),
         runOnUiThread {
             binding.btnRtmTest.isEnabled = true
         }
+        CoroutineScope(Dispatchers.Default).launch {
+            rtcTestManager.stopTest()
+        }
     }
 
     override fun onRtmTestCycleCompleted() {
@@ -247,6 +277,21 @@ class MainActivity : AppCompatActivity(),
         // Optional: Handle DNS results if needed
     }
 
+    override fun onRtcTestStarted() {
+        Log.d(TAG, "RTC test started")
+        updateHistoryUI("RTC test started")
+    }
+
+    override fun onRtcTestProgress(message: String) {
+        updateHistoryUI(message)
+    }
+
+    override fun onRtcTestCompleted() {
+        Log.d(TAG, "RTC test completed")
+        updateHistoryUI("RTC test completed")
+    }
+
+
     private fun updateHistoryUI(message: String) {
         runOnUiThread {
             binding.tvHistory.append("\r\n\r\n$message")
@@ -259,4 +304,6 @@ class MainActivity : AppCompatActivity(),
             }
         }
     }
+
+
 }

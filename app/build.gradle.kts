@@ -102,4 +102,5 @@ dependencies {
     implementation(libs.commons.codec)
 //    implementation(libs.agora.rtm)
     implementation(libs.okhttp3)
+    implementation(libs.agora.rtc)
 }
