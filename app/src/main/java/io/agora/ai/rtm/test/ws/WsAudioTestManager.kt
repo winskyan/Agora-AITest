@@ -92,7 +92,7 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
                             val avgDiff = receiverMessageDiffSum / audioDataReceiveCount
 
                             writeMessageToFile(
-                                "Receive audio data: ${message}, diff: ${diff}ms " +
+                                "Receive audio data: ${timestamp}, diff: ${diff}ms " +
                                         "Average diff: ${avgDiff}ms sendCount: $audioDataSendCount " +
                                         "receiveCount: $audioDataReceiveCount"
                             )
@@ -237,15 +237,16 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
                 pendingAudioDataByteBuffer?.flip()
                 pendingAudioDataByteBuffer?.get(audioData)
 
+                val currentTime = System.currentTimeMillis().toString()
                 val audioDataStr =
-                    System.currentTimeMillis().toString() + "-" + Utils.byteArrayToBase64(audioData)
-                writeMessageToFile("Send ws audio data: $audioDataStr")
+                    currentTime + "-" + Utils.byteArrayToBase64(audioData)
+                writeMessageToFile("Send ws audio data: $currentTime")
                 val ret = WsManager.sendMessage(audioDataStr)
                 if (ret) {
                     audioDataSendCount++
                 } else {
                     audioDataSendFailCount++
-                    updateHistoryUI("Failed to send ws audio data: $audioDataStr")
+                    updateHistoryUI("Failed to send ws audio data: $currentTime")
                 }
 
                 pendingAudioDataByteBuffer?.clear()
