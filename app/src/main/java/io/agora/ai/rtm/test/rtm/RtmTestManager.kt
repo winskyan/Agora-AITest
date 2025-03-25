@@ -5,25 +5,16 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import io.agora.ai.rtm.test.BuildConfig
+import io.agora.ai.rtm.test.base.TestManagerBase
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.utils.KeyCenter
 import io.agora.ai.rtm.test.utils.Utils
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.IOException
-import java.util.concurrent.Executors
 
 /**
  * RTM Test Manager
  * Handles RTM test statistics, file output, and test cycle management
  */
-class RtmTestManager(private val context: Context) {
-
-    companion object {
-        private const val TAG = Constants.TAG + "-RtmTestManager"
-    }
-
+class RtmTestManager(context: Context) : TestManagerBase(context) {
     // Test configuration
     private var channelName = ""
     private var remainingTests = 0
@@ -42,14 +33,7 @@ class RtmTestManager(private val context: Context) {
     private var testCount = 0
     private var timeoutCount = 0
 
-    // Timeout handler
-    private val mainHandler = Handler(Looper.getMainLooper())
     private var messageTimeoutRunnable: Runnable? = null
-
-    // File output
-    private var historyFileName = ""
-    private val logExecutor = Executors.newSingleThreadExecutor()
-    private var bufferedWriter: BufferedWriter? = null
 
     private var loopSleepTime = Constants.INTERVAL_LOOP_WAIT
 
@@ -69,7 +53,7 @@ class RtmTestManager(private val context: Context) {
     private val internalRtmListener = object : RtmManager.RtmMessageListener {
         override fun onRtmMessageReceived(message: String) {
             Log.d(TAG, "onRtmMessageReceived message:$message")
-            if (0L != sendMessageTime && message == sendMessage) {
+            if (0L != sendMessageTime && message.startsWith(sendMessage)) {
                 // Cancel message timeout
                 cancelMessageTimeout()
 
@@ -79,7 +63,7 @@ class RtmTestManager(private val context: Context) {
                 val receiverMessageInChannelAverageDiff =
                     receiverMessageInChannelDiffSum / (Constants.MAX_IN_CHANNEL_TEST_COUNT - remainInChannelTestCount)
                 val sendRtmMessageDiffStr =
-                    "ReceiveRtmMessage:$sendMessage diff:${sendRtmMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
+                    "ReceiveRtmMessage:$message diff:${sendRtmMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
                 updateHistoryUI(sendRtmMessageDiffStr)
 
                 if (remainInChannelTestCount == 0) {
@@ -100,12 +84,13 @@ class RtmTestManager(private val context: Context) {
                     logoutRtm()
                 }
             } else {
-                updateHistoryUI("ReceiveRtmMessage:$message")
+                updateHistoryUI("ReceiveRtmMessage:$message fail to match send message:$sendMessage")
             }
         }
 
         override fun onRtmConnected() {
-            val loginConnectedTime = System.currentTimeMillis() - loginTime
+            val currentTime = System.currentTimeMillis()
+            val loginConnectedTime = currentTime - loginTime
             loginConnectedDiffSum += loginConnectedTime
             testCount++
 
@@ -167,14 +152,17 @@ class RtmTestManager(private val context: Context) {
             "history-rtm-${channelName}-${System.currentTimeMillis()}.txt"
         initWriter()
 
-        writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
-        writeMessageToFile("RTM version: ${RtmManager.getRtmVersion()}", false)
+        updateHistoryUI("Demo version: ${BuildConfig.VERSION_NAME}")
+        updateHistoryUI("RTM version: ${RtmManager.getRtmVersion()}")
 
         // Reset statistics
         resetTestStats()
 
         // Start test cycle
         testStatusCallback?.onRtmTestStarted()
+
+        testStartTime = System.currentTimeMillis()
+        testStarted = true
         startRtmTestCycle(true)
     }
 
@@ -184,42 +172,16 @@ class RtmTestManager(private val context: Context) {
     fun stopTest() {
         remainingTests = 0
         cancelMessageTimeout()
+        testStarted = false
     }
 
     /**
      * Release resources
      */
-    fun release() {
+    override fun release() {
+        super.release()
         cancelMessageTimeout()
-        closeWriter()
-        logExecutor.shutdown()
         RtmManager.release()
-    }
-
-    /**
-     * Initialize file writer
-     */
-    private fun initWriter() {
-        try {
-            closeWriter()
-            val cacheDir = context.externalCacheDir
-            val logFile = File(cacheDir, historyFileName)
-            bufferedWriter = BufferedWriter(FileWriter(logFile, true))
-        } catch (e: IOException) {
-            Log.e(TAG, "Error creating BufferedWriter", e)
-        }
-    }
-
-    /**
-     * Close file writer
-     */
-    private fun closeWriter() {
-        try {
-            bufferedWriter?.close()
-            bufferedWriter = null
-        } catch (e: IOException) {
-            Log.e(TAG, "Error closing BufferedWriter", e)
-        }
     }
 
     /**
@@ -325,41 +287,21 @@ class RtmTestManager(private val context: Context) {
         val averageDiff = "login Connected diff average:${loginConnectedDiffSum / divisor}ms," +
                 "echo message average:${receiverMessageDiffSum / divisor}ms," +
                 "receiver first echo message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
-                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount"
+                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount in ${
+                    formatTime(
+                        System.currentTimeMillis() - testStartTime
+                    )
+                }"
         updateHistoryUI(averageDiff)
     }
 
     /**
      * Update history UI and write to file
      */
-    private fun updateHistoryUI(message: String) {
-        // Add timestamp to log message
-        val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-        val timestampedMessage = "$timestamp: $message"
-
-        Log.d(TAG, timestampedMessage)
-        testStatusCallback?.onRtmTestProgress(timestampedMessage) // Send timestamped message to UI
-        writeMessageToFile(message) // The timestamp is added in writeMessageToFile method
-    }
-
-    /**
-     * Write message to file
-     */
-    private fun writeMessageToFile(message: String, withTimestamp: Boolean = true) {
-        logExecutor.execute {
-            try {
-                if (withTimestamp) {
-                    // Add timestamp with yyyy-MM-dd HH:mm:ss.SSS format
-                    val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-                    bufferedWriter?.append("$timestamp: $message")?.append("\n")
-                } else {
-                    bufferedWriter?.append(message)?.append("\n")
-                }
-                bufferedWriter?.flush()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing message to file", e)
-            }
-        }
+    override fun updateHistoryUI(message: String) {
+        val formatMessage = formatMessage(message)
+        super.updateHistoryUI(formatMessage)
+        testStatusCallback?.onRtmTestProgress(formatMessage) // Send timestamped message to UI
     }
 
     /**

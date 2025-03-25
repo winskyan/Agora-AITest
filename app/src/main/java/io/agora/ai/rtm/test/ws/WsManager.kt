@@ -49,7 +49,7 @@ object WsManager {
         fun onWSError(errorMessage: String)
     }
 
-    fun create(listener: WSMessageListener) {
+    fun setListener(listener: WSMessageListener) {
         this.wsListener = listener
     }
 

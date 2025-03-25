@@ -3,30 +3,23 @@ package io.agora.ai.rtm.test.ws
 import android.content.Context
 import android.util.Log
 import io.agora.ai.rtm.test.BuildConfig
-import io.agora.ai.rtm.test.constants.Constants
+import io.agora.ai.rtm.test.base.TestManagerBase
 import io.agora.ai.rtm.test.rtc.RtcManager
-import io.agora.ai.rtm.test.rtc.RtcTestManager.TestStatusCallback
 import io.agora.ai.rtm.test.rtm.RtmManager
 import io.agora.ai.rtm.test.utils.Utils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.IOException
 import java.nio.BufferOverflowException
 import java.nio.ByteBuffer
-import java.util.concurrent.Executors
 
 /**
  * WebSocket Test Manager
  * Handles WebSocket test statistics, file output, and test cycle management
  */
-class WsAudioTestManager(private val context: Context) {
+class WsAudioTestManager(context: Context) : TestManagerBase(context) {
 
     companion object {
-        private const val TAG = Constants.TAG + "-WsAudioTestManager"
         private const val SEND_FRAME_COUNT_ONCE = 6
     }
 
@@ -36,14 +29,10 @@ class WsAudioTestManager(private val context: Context) {
 
     private var testStatusCallback: TestStatusCallback? = null
 
-    // File output
-    private var historyFileName = ""
-    private val logExecutor = Executors.newSingleThreadExecutor()
-    private var bufferedWriter: BufferedWriter? = null
-
     private var receiverMessageDiffSum = 0L
 
     private var audioDataSendCount = 0
+    private var audioDataSendFailCount = 0
     private var audioDataReceiveCount = 0
 
     private var pendingAudioDataByteBuffer: ByteBuffer? = null
@@ -60,15 +49,15 @@ class WsAudioTestManager(private val context: Context) {
     // WebSocket message listener implementation
     private val internalWsListener = object : WsManager.WSMessageListener {
         override fun onWSConnected() {
-            Log.d(TAG, "onWSConnected")
+            Log.d(TAG, "onWSConnected for audio test")
             connectedSuccess = true
-            writeMessageToFile("ws audio test connected")
+            updateHistoryUI("ws audio test connected")
         }
 
         override fun onWSDisconnected() {
             // Check if already handling disconnect event
             connectedSuccess = false
-            writeMessageToFile("ws audio test disconnect")
+            updateHistoryUI("ws audio test disconnect")
             CoroutineScope(Dispatchers.Default).launch {
                 try {
                     Thread.sleep(1000)
@@ -77,6 +66,7 @@ class WsAudioTestManager(private val context: Context) {
                 }
                 closeWriter()
             }
+            updateTestAverage()
             testStatusCallback?.onWssAudioTestCompleted()
         }
 
@@ -141,9 +131,6 @@ class WsAudioTestManager(private val context: Context) {
     fun initialize(callback: TestStatusCallback) {
         this.testStatusCallback = callback
 
-        // Initialize WebSocket Manager with our internal listener
-        WsManager.create(internalWsListener)
-
         Log.d(TAG, "WebSocket initialized")
     }
 
@@ -155,6 +142,7 @@ class WsAudioTestManager(private val context: Context) {
     ) {
         connectedSuccess = false
         audioDataSendCount = 0
+        audioDataSendFailCount = 0
         audioDataReceiveCount = 0
         receiverMessageDiffSum = 0L
         pendingAudioDataByteBuffer?.clear()
@@ -163,12 +151,18 @@ class WsAudioTestManager(private val context: Context) {
         historyFileName = "history-ws-audio-${System.currentTimeMillis()}.txt"
         initWriter()
 
-        writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
-        writeMessageToFile("RTM version: ${RtmManager.getRtmVersion()}", false)
-        writeMessageToFile("RTC version: ${RtcManager.getRtcVersion()}", false)
+        updateHistoryUI("Demo version: ${BuildConfig.VERSION_NAME}")
+        updateHistoryUI("RTM version: ${RtmManager.getRtmVersion()}")
+        updateHistoryUI("RTC version: ${RtcManager.getRtcVersion()}")
 
         // Start test cycle
         testStatusCallback?.onWsAudioTestStarted()
+        testStartTime = System.currentTimeMillis()
+        testStarted = true
+
+        // Initialize WebSocket Manager with our internal listener
+        WsManager.setListener(internalWsListener)
+
         connectWs(wsUrl)
     }
 
@@ -177,48 +171,24 @@ class WsAudioTestManager(private val context: Context) {
      */
     fun stopTest() {
         if (connectedSuccess) {
-            updateHistoryUI("Ws Audio Test End")
-            logoutWs()
-            updateTestAverage()
+            updateHistoryUI("Ws Audio Test End after 1s")
+            mainHandler.postDelayed({
+                logoutWs()
+            }, 1000)
+
         }
+        testStarted = false
         pendingAudioDataByteBuffer?.clear()
     }
 
     /**
      * Release resources
      */
-    fun release() {
-        closeWriter()
+    override fun release() {
+        super.release()
         pendingAudioDataByteBuffer?.clear()
         pendingAudioDataByteBuffer = null
-        logExecutor.shutdown()
         WsManager.release()
-    }
-
-    /**
-     * Initialize file writer
-     */
-    private fun initWriter() {
-        try {
-            closeWriter()
-            val cacheDir = context.externalCacheDir
-            val logFile = File(cacheDir, historyFileName)
-            bufferedWriter = BufferedWriter(FileWriter(logFile, true))
-        } catch (e: IOException) {
-            Log.e(TAG, "Error creating BufferedWriter", e)
-        }
-    }
-
-    /**
-     * Close file writer
-     */
-    private fun closeWriter() {
-        try {
-            bufferedWriter?.close()
-            bufferedWriter = null
-        } catch (e: IOException) {
-            Log.e(TAG, "Error closing BufferedWriter", e)
-        }
     }
 
     /**
@@ -242,7 +212,7 @@ class WsAudioTestManager(private val context: Context) {
 
     @Synchronized
     fun sendAudioFrame(data: ByteArray) {
-        if (!connectedSuccess) {
+        if (!connectedSuccess || !testStarted) {
             Log.i(TAG, "SendWsMessage: Not connected")
             return
         }
@@ -253,6 +223,7 @@ class WsAudioTestManager(private val context: Context) {
         if (pendingAudioDataByteBuffer == null) {
             pendingAudioDataByteBuffer =
                 ByteBuffer.allocateDirect(data.size * SEND_FRAME_COUNT_ONCE)
+            updateHistoryUI("Allocated ws test buffer for audio data size: ${data.size} frame count: $SEND_FRAME_COUNT_ONCE")
         }
 
         try {
@@ -269,8 +240,13 @@ class WsAudioTestManager(private val context: Context) {
                 val audioDataStr =
                     System.currentTimeMillis().toString() + "-" + Utils.byteArrayToBase64(audioData)
                 writeMessageToFile("Send ws audio data: $audioDataStr")
-                WsManager.sendMessage(audioDataStr)
-                audioDataSendCount++
+                val ret = WsManager.sendMessage(audioDataStr)
+                if (ret) {
+                    audioDataSendCount++
+                } else {
+                    audioDataSendFailCount++
+                    updateHistoryUI("Failed to send ws audio data: $audioDataStr")
+                }
 
                 pendingAudioDataByteBuffer?.clear()
             }
@@ -290,8 +266,12 @@ class WsAudioTestManager(private val context: Context) {
             "Ws audio data test result: No data received, send count: $audioDataSendCount"
         } else {
             val avgDiff = receiverMessageDiffSum / audioDataReceiveCount
-            "Ws audio data test result: Average delay ${avgDiff}ms, Success rate: ${audioDataReceiveCount * 100 / audioDataSendCount}%, " +
-                    "Sent: $audioDataSendCount, Received: $audioDataReceiveCount"
+            "Ws audio data test result: Average delay ${avgDiff}ms, Receive rate: ${audioDataReceiveCount * 100 / audioDataSendCount}%, " +
+                    "Sent: $audioDataSendCount, Received: $audioDataReceiveCount Send Fail Count:${audioDataSendFailCount} in ${
+                        formatTime(
+                            System.currentTimeMillis() - testStartTime
+                        )
+                    }"
         }
         updateHistoryUI(averageDiff)
     }
@@ -299,35 +279,9 @@ class WsAudioTestManager(private val context: Context) {
     /**
      * Update history UI and write to file
      */
-    private fun updateHistoryUI(message: String) {
-        // Add timestamp to log message
-        val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-        val timestampedMessage = "$timestamp: $message"
-
-        Log.d(TAG, timestampedMessage)
-        testStatusCallback?.onWssAudioTestProgress(timestampedMessage) // Send timestamped message to UI
-        writeMessageToFile(message) // The timestamp is added in writeMessageToFile method
+    override fun updateHistoryUI(message: String) {
+        val formatMessage = formatMessage(message)
+        super.updateHistoryUI(formatMessage)
+        testStatusCallback?.onWssAudioTestProgress(formatMessage) // Send timestamped message to UI
     }
-
-    /**
-     * Write message to file
-     */
-    private fun writeMessageToFile(message: String, withTimestamp: Boolean = true) {
-        logExecutor.execute {
-            try {
-                if (withTimestamp) {
-                    // Add timestamp with yyyy-MM-dd HH:mm:ss.SSS format
-                    val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-                    bufferedWriter?.append("$timestamp: $message")?.append("\n")
-                } else {
-                    bufferedWriter?.append(message)?.append("\n")
-                }
-                bufferedWriter?.flush()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing message to file", e)
-            }
-        }
-    }
-
-
 }

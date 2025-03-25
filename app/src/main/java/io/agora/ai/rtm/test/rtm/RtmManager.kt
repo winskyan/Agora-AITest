@@ -11,6 +11,7 @@ import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConfig
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
+import io.agora.rtm.RtmLogConfig
 import io.agora.rtm.SubscribeOptions
 
 
@@ -32,6 +33,9 @@ object RtmManager {
         val rtmConfig =
             RtmConfig.Builder(appId, rtmUserId)
                 .useStringUserId(true)
+                .logConfig(RtmLogConfig().apply {
+                    fileSize = 10 * 1024
+                })
                 .eventListener(object : RtmEventListener {
 
                     override fun onLinkStateEvent(event: LinkStateEvent?) {

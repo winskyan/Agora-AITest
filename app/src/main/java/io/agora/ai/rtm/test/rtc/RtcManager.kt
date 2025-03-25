@@ -277,19 +277,13 @@ object RtcManager {
         return io.agora.rtc2.Constants.ERR_OK
     }
 
-    fun sendAudioMetadata(metadata: ByteArray): Int {
+    fun sendAudioMetadata(metadata: ByteArray): Int? {
         Log.d(TAG, "sendAudioMetadata metadata:${String(metadata)} size:${metadata.size}")
         if (mRtcEngine == null) {
             Log.e(TAG, "leaveChannel error: not initialized")
             return io.agora.rtc2.Constants.ERR_NOT_INITIALIZED
         }
-        val ret = mRtcEngine?.sendAudioMetadata(metadata)
-        return if (ret == 0) {
-            io.agora.rtc2.Constants.ERR_OK
-        } else {
-            Log.e(TAG, "sendAudioMetadata error:$ret")
-            io.agora.rtc2.Constants.ERR_FAILED
-        }
+        return mRtcEngine?.sendAudioMetadata(metadata)
     }
 
     fun getRtcVersion(): String {

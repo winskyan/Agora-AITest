@@ -3,24 +3,18 @@ package io.agora.ai.rtm.test.rtc
 import android.content.Context
 import android.util.Log
 import io.agora.ai.rtm.test.BuildConfig
-import io.agora.ai.rtm.test.constants.Constants
-import io.agora.ai.rtm.test.rtm.RtmTestManager.TestStatusCallback
+import io.agora.ai.rtm.test.base.TestManagerBase
 import io.agora.ai.rtm.test.utils.KeyCenter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.IOException
 import java.nio.BufferOverflowException
 import java.nio.ByteBuffer
-import java.util.concurrent.Executors
 
-class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListener {
+class RtcTestManager(context: Context) : TestManagerBase(context),
+    RtcManager.RtcMessageListener {
 
     companion object {
-        private const val TAG = Constants.TAG + "-RtcTestManager"
         private const val SEND_FRAME_COUNT_ONCE = 4
     }
 
@@ -28,14 +22,11 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
 
     private var testStatusCallback: TestStatusCallback? = null
 
-    // File output
-    private var historyFileName = ""
-    private val logExecutor = Executors.newSingleThreadExecutor()
-    private var bufferedWriter: BufferedWriter? = null
 
     private var receiverMessageDiffSum = 0L
 
     private var audioMetaDataSendCount = 0
+    private var audioMetaDataSendFailCount = 0
     private var audioMetaDataReceiveCount = 0
 
     private var pendingAudioDataByteBuffer: ByteBuffer? = null
@@ -56,57 +47,10 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
         RtcManager.create(context, KeyCenter.APP_ID, this)
     }
 
-
-    /**
-     * Initialize file writer
-     */
-    private fun initWriter() {
-        try {
-            closeWriter()
-            val cacheDir = context.externalCacheDir
-            val logFile = File(cacheDir, historyFileName)
-            bufferedWriter = BufferedWriter(FileWriter(logFile, true))
-        } catch (e: IOException) {
-            Log.e(TAG, "Error creating BufferedWriter", e)
-        }
-    }
-
-    /**
-     * Write message to file
-     */
-    private fun writeMessageToFile(message: String, withTimestamp: Boolean = true) {
-        logExecutor.execute {
-            try {
-                if (withTimestamp) {
-                    // Add timestamp with yyyy-MM-dd HH:mm:ss.SSS format
-                    val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-                    bufferedWriter?.append("$timestamp: $message")?.append("\n")
-                } else {
-                    bufferedWriter?.append(message)?.append("\n")
-                }
-                bufferedWriter?.flush()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing message to file", e)
-            }
-        }
-    }
-
-    /**
-     * Close file writer
-     */
-    private fun closeWriter() {
-        try {
-            bufferedWriter?.close()
-            bufferedWriter = null
-        } catch (e: IOException) {
-            Log.e(TAG, "Error closing BufferedWriter", e)
-        }
-    }
-
-
     fun startTest(channelName: String) {
         joinChannelSuccess = false
         audioMetaDataSendCount = 0
+        audioMetaDataSendFailCount = 0
         audioMetaDataReceiveCount = 0
         receiverMessageDiffSum = 0L
         pendingAudioDataByteBuffer?.clear()
@@ -115,27 +59,30 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
             "history-rtc-${channelName}-${System.currentTimeMillis()}.txt"
         initWriter()
 
-        writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
-        writeMessageToFile("RTC version: ${RtcManager.getRtcVersion()}", false)
+        updateHistoryUI("Demo version: ${BuildConfig.VERSION_NAME}")
+        updateHistoryUI("RTC version: ${RtcManager.getRtcVersion()}")
 
         updateHistoryUI("joinChannel channel: $channelName")
+        testStartTime = System.currentTimeMillis()
+        testStarted = true
         // Initialize history file
         RtcManager.joinChannel("", channelName, 0, io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER)
     }
 
     fun stopTest() {
         if (joinChannelSuccess) {
-            updateHistoryUI("leaveChannel")
-            RtcManager.leaveChannel()
-            updateTestAverage()
+            updateHistoryUI("leaveChannel after 1s")
+            mainHandler.postDelayed({
+                RtcManager.leaveChannel()
+            }, 1000)
         }
-
+        testStarted = false
         pendingAudioDataByteBuffer?.clear()
     }
 
     @Synchronized
     private fun sendAudioFrame(data: ByteArray) {
-        if (!joinChannelSuccess) {
+        if (!joinChannelSuccess || !testStarted) {
             Log.i(TAG, "sendAudioFrame: not in channel")
             return
         }
@@ -147,6 +94,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
         if (pendingAudioDataByteBuffer == null) {
             pendingAudioDataByteBuffer =
                 ByteBuffer.allocateDirect(data.size * SEND_FRAME_COUNT_ONCE)
+            updateHistoryUI("Allocated rtc test buffer for audio data size: ${data.size} frame count: $SEND_FRAME_COUNT_ONCE")
         }
 
         try {
@@ -165,8 +113,13 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
                 val audioMetaData =
                     System.currentTimeMillis().toString() + "-" + "audioData"
                 writeMessageToFile("Send audio meta data: $audioMetaData")
-                RtcManager.sendAudioMetadata(audioMetaData.toByteArray())
-                audioMetaDataSendCount++
+                val ret = RtcManager.sendAudioMetadata(audioMetaData.toByteArray())
+                if (ret == 0) {
+                    audioMetaDataSendCount++
+                } else {
+                    audioMetaDataSendFailCount++
+                    updateHistoryUI("Failed to send audio metadata: $audioMetaData ret: $ret")
+                }
 
                 pendingAudioDataByteBuffer?.clear()
             }
@@ -179,42 +132,42 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
 
     private fun updateTestAverage() {
         val averageDiff = if (audioMetaDataReceiveCount == 0) {
-            "Audio metadata test result: No data received, send count: $audioMetaDataSendCount"
+            "Rtc Audio metadata test result: No data received, send count: $audioMetaDataSendCount"
         } else {
             val avgDiff = receiverMessageDiffSum / audioMetaDataReceiveCount
-            "Audio metadata test result: Average delay ${avgDiff}ms, Success rate: ${audioMetaDataReceiveCount * 100 / audioMetaDataSendCount}%, " +
-                    "Sent: $audioMetaDataSendCount, Received: $audioMetaDataReceiveCount"
+            val testTime = System.currentTimeMillis() - testStartTime
+            "Rtc Audio metadata test result: Average delay ${avgDiff}ms, Receive rate: ${audioMetaDataReceiveCount * 100 / audioMetaDataSendCount}%, " +
+                    "Sent: $audioMetaDataSendCount, Received: $audioMetaDataReceiveCount Send Fail Count:${audioMetaDataSendFailCount} in ${
+                        formatTime(
+                            testTime
+                        )
+                    }"
         }
         updateHistoryUI(averageDiff)
     }
 
-    private fun updateHistoryUI(message: String) {
-        // Add timestamp to log message
-        val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-        val timestampedMessage = "$timestamp: $message"
-
-        Log.d(TAG, timestampedMessage)
-        testStatusCallback?.onRtcTestProgress(timestampedMessage) // Send timestamped message to UI
-        writeMessageToFile(message) // The timestamp is added in writeMessageToFile method
+    override fun updateHistoryUI(message: String) {
+        val formatMessage = formatMessage(message)
+        super.updateHistoryUI(formatMessage)
+        testStatusCallback?.onRtcTestProgress(formatMessage) // Send timestamped message to UI
     }
 
-    fun release() {
-        closeWriter()
+    override fun release() {
+        super.release()
         pendingAudioDataByteBuffer?.clear()
         pendingAudioDataByteBuffer = null
-        logExecutor.shutdown()
         RtcManager.destroy()
     }
 
     override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
         joinChannelSuccess = true
-        writeMessageToFile("onJoinChannelSuccess Channel: $channel uid:$uid")
+        updateHistoryUI("onJoinChannelSuccess Channel: $channel uid:$uid")
         testStatusCallback?.onRtcTestStarted()
     }
 
     override fun onLeaveChannelSuccess() {
         joinChannelSuccess = false
-        writeMessageToFile("onLeaveChannelSuccess")
+        updateHistoryUI("onLeaveChannelSuccess")
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 Thread.sleep(1000)
@@ -223,6 +176,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
             }
             closeWriter()
         }
+        updateTestAverage()
         testStatusCallback?.onRtcTestCompleted()
     }
 
@@ -255,7 +209,7 @@ class RtcTestManager(private val context: Context) : RtcManager.RtcMessageListen
                         val avgDiff = receiverMessageDiffSum / audioMetaDataReceiveCount
 
                         writeMessageToFile(
-                            "Receive audio meta data: ${audioMetaData}, diff: ${diff}ms " +
+                            "Receive rtc audio meta data: ${audioMetaData}, diff: ${diff}ms " +
                                     "Average diff: ${avgDiff}ms sendCount: $audioMetaDataSendCount " +
                                     "receiveCount: $audioMetaDataReceiveCount"
                         )

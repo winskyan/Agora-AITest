@@ -5,24 +5,15 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import io.agora.ai.rtm.test.BuildConfig
+import io.agora.ai.rtm.test.base.TestManagerBase
 import io.agora.ai.rtm.test.constants.Constants
 import io.agora.ai.rtm.test.rtm.RtmManager
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.IOException
-import java.util.concurrent.Executors
 
 /**
  * WebSocket Test Manager
  * Handles WebSocket test statistics, file output, and test cycle management
  */
-class WsTestManager(private val context: Context) {
-
-    companion object {
-        private const val TAG = Constants.TAG + "-WsTestManager"
-    }
-
+class WsTestManager(context: Context) : TestManagerBase(context) {
     // Test configuration
     private var wsUrl = ""
     private var remainingTests = 0
@@ -41,14 +32,8 @@ class WsTestManager(private val context: Context) {
     private var testCount = 0
     private var timeoutCount = 0
 
-    // Timeout handler
-    private val mainHandler = Handler(Looper.getMainLooper())
     private var messageTimeoutRunnable: Runnable? = null
 
-    // File output
-    private var historyFileName = ""
-    private val logExecutor = Executors.newSingleThreadExecutor()
-    private var bufferedWriter: BufferedWriter? = null
 
     // Variable to store disconnect protection Runnable
     private var disconnectProtectionRunnable: Runnable? = null
@@ -109,7 +94,7 @@ class WsTestManager(private val context: Context) {
 
         override fun onWSMessageReceived(message: String) {
             Log.d(TAG, "onWSMessageReceived message:$message")
-            if (0L != sendMessageTime && message == sendMessage) {
+            if (0L != sendMessageTime && message.startsWith(sendMessage)) {
                 // Cancel message timeout
                 cancelMessageTimeout()
 
@@ -120,7 +105,7 @@ class WsTestManager(private val context: Context) {
                 val receiverMessageInChannelAverageDiff =
                     receiverMessageInChannelDiffSum / (Constants.MAX_IN_CHANNEL_TEST_COUNT - remainInChannelTestCount)
                 val sendWsMessageDiffStr =
-                    "ReceiverWsMessage:$sendMessage diff:${sendMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
+                    "ReceiverWsMessage:$message diff:${sendMessageDiff}ms average:${receiverMessageInChannelAverageDiff}ms"
                 updateHistoryUI(sendWsMessageDiffStr)
 
                 if (remainInChannelTestCount == 0) {
@@ -141,7 +126,7 @@ class WsTestManager(private val context: Context) {
                     logoutWs()
                 }
             } else {
-                updateHistoryUI("ReceiveWsMessage:$message")
+                updateHistoryUI("ReceiveWsMessage:$message not match send message:$sendMessage")
             }
         }
 
@@ -166,9 +151,6 @@ class WsTestManager(private val context: Context) {
     fun initialize(callback: TestStatusCallback) {
         this.testStatusCallback = callback
 
-        // Initialize WebSocket Manager with our internal listener
-        WsManager.create(internalWsListener)
-
         Log.d(TAG, "WebSocket initialized")
     }
 
@@ -189,14 +171,19 @@ class WsTestManager(private val context: Context) {
         historyFileName = "history-ws-${System.currentTimeMillis()}.txt"
         initWriter()
 
-        writeMessageToFile("Demo version: ${BuildConfig.VERSION_NAME}", false)
-        writeMessageToFile("RTM version: ${RtmManager.getRtmVersion()}", false)
+        updateHistoryUI("Demo version: ${BuildConfig.VERSION_NAME}")
+        updateHistoryUI("RTM version: ${RtmManager.getRtmVersion()}")
 
         // Reset statistics
         resetTestStats()
 
         // Start test cycle
         testStatusCallback?.onWsTestStarted()
+        testStartTime = System.currentTimeMillis()
+
+        // Initialize WebSocket Manager with our internal listener
+        WsManager.setListener(internalWsListener)
+
         startWsTestCycle(true)
     }
 
@@ -211,37 +198,10 @@ class WsTestManager(private val context: Context) {
     /**
      * Release resources
      */
-    fun release() {
+    override fun release() {
+        super.release()
         cancelMessageTimeout()
-        closeWriter()
-        logExecutor.shutdown()
         WsManager.release()
-    }
-
-    /**
-     * Initialize file writer
-     */
-    private fun initWriter() {
-        try {
-            closeWriter()
-            val cacheDir = context.externalCacheDir
-            val logFile = File(cacheDir, historyFileName)
-            bufferedWriter = BufferedWriter(FileWriter(logFile, true))
-        } catch (e: IOException) {
-            Log.e(TAG, "Error creating BufferedWriter", e)
-        }
-    }
-
-    /**
-     * Close file writer
-     */
-    private fun closeWriter() {
-        try {
-            bufferedWriter?.close()
-            bufferedWriter = null
-        } catch (e: IOException) {
-            Log.e(TAG, "Error closing BufferedWriter", e)
-        }
     }
 
     /**
@@ -352,41 +312,21 @@ class WsTestManager(private val context: Context) {
         val averageDiff = "login Connected diff average:${loginConnectedDiffSum / divisor}ms," +
                 "echo message average:${receiverMessageDiffSum / divisor}ms," +
                 "receiver first echo message from login average:${receiverMessageFromLoginDiffSum / divisor}ms," +
-                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount"
+                "test count:$testCount, success count:$successCount, timeout count:$timeoutCount in ${
+                    formatTime(
+                        System.currentTimeMillis() - testStartTime
+                    )
+                }"
         updateHistoryUI(averageDiff)
     }
 
     /**
      * Update history UI and write to file
      */
-    private fun updateHistoryUI(message: String) {
-        // Add timestamp to log message
-        val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-        val timestampedMessage = "$timestamp: $message"
-
-        Log.d(TAG, timestampedMessage)
-        testStatusCallback?.onWsTestProgress(timestampedMessage) // Send timestamped message to UI
-        writeMessageToFile(message) // The timestamp is added in writeMessageToFile method
-    }
-
-    /**
-     * Write message to file
-     */
-    private fun writeMessageToFile(message: String, withTimestamp: Boolean = true) {
-        logExecutor.execute {
-            try {
-                if (withTimestamp) {
-                    // Add timestamp with yyyy-MM-dd HH:mm:ss.SSS format
-                    val timestamp = Constants.DATE_FORMAT.format(System.currentTimeMillis())
-                    bufferedWriter?.append("$timestamp: $message")?.append("\n")
-                } else {
-                    bufferedWriter?.append(message)?.append("\n")
-                }
-                bufferedWriter?.flush()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing message to file", e)
-            }
-        }
+    override fun updateHistoryUI(message: String) {
+        val formatMessage = formatMessage(message)
+        super.updateHistoryUI(formatMessage)
+        testStatusCallback?.onWsTestProgress(formatMessage) // Send timestamped message to UI
     }
 
     /**
