@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-这是一个用于测试声网RTM和WebSocket连接性能的Android应用程序。通过该应用，您可以测试RTM和WebSocket的连接速度、消息收发延迟等性能指标。
+这是一个用于测试声网RTM、RTC和WebSocket连接性能的Android应用程序。通过该应用，您可以测试RTM、RTC和WebSocket的连接速度、消息收发延迟、音频数据传输等性能指标。
 
 ## 运行指南
 
@@ -34,7 +34,7 @@ APP_CERTIFICATE=你的声网证书密钥
 - 功能：立即停止当前正在进行的测试
 - 使用方法：点击"Stop"按钮
 
-### RTM测试 (Rtm Test)
+### RTM测试 (Rtm Test按钮)
 
 - 功能：测试声网RTM服务的连接性能
 - 默认频道: wei888
@@ -53,6 +53,21 @@ APP_CERTIFICATE=你的声网证书密钥
   - 发送RTM消息到收到相同消息的平均时间
   - 从开始登录到收到第一条消息的时间
 
+### RTC音频测试 (Rtm Test按钮)
+
+- 功能：测试RTC音频数据传输性能
+- 默认频道: wei999
+- 测试流程：
+  1. 加入RTC频道 (joinChannel)
+  2. 连接成功回调 (onJoinChannelSuccess)
+  3. 采集音频数据 (onRecordAudioFrame)
+  4. 发送音频元数据 (sendAudioMetadata)
+  5. 接收音频元数据 (onAudioMetadataReceived)
+  6. 离开频道 (leaveChannel)
+- 测试数据：
+  - 音频元数据发送到接收延迟
+  - 音频数据传输成功率
+
 ### WebSocket测试 (Ws Test)
 
 - 功能：测试WebSocket连接性能
@@ -68,6 +83,21 @@ APP_CERTIFICATE=你的声网证书密钥
   - 从开始连接到连接成功的时间
   - 发送WebSocket消息到收到相同消息的平均时间
   - 从开始连接到收到第一条消息的时间
+
+### WebSocket音频测试 Rtm Test按钮)
+
+- 功能：测试WebSocket音频数据传输性能
+- 默认URL: wss://108.129.196.84:8765
+- 测试流程：
+  1. 连接WebSocket (connectWs)
+  2. 连接成功回调 (onWSConnected)
+  3. 接收RTC音频数据 (onRecordAudioFrame)
+  4. 发送音频数据 (sendMessage)
+  5. 接收音频数据 (onWSMessageReceived)
+  6. 断开连接 (logoutWs)
+- 测试数据：
+  - 音频数据发送到接收延迟
+  - 音频数据传输成功率
 
 ## 测试结果
 
@@ -98,6 +128,15 @@ RTM测试结果文件包含以下信息：
 - 从登录到收到第一条消息的时间
 - 测试统计摘要（平均连接时间、平均消息延迟、测试计数）
 
+#### RTC音频测试结果文件 (`history-rtc*.txt`)
+
+RTC音频测试结果文件包含以下信息：
+
+- 音频数据采集和发送统计
+- 音频元数据接收延迟统计
+- 音频数据传输成功率
+- 测试时间统计
+
 #### WebSocket测试结果文件 (`history-ws*.txt`)
 
 WebSocket测试结果文件包含以下信息：
@@ -109,12 +148,21 @@ WebSocket测试结果文件包含以下信息：
 - 从连接到收到第一条消息的时间
 - 测试统计摘要（平均连接时间、平均消息延迟、测试计数）
 
+#### WebSocket音频测试结果文件 (`history-ws-audio*.txt`)
+
+WebSocket音频测试结果文件包含以下信息：
+
+- 音频数据发送统计
+- 音频数据接收延迟统计
+- 音频数据传输成功率
+- 测试时间统计
+
 ## 使用方法
 
 1. 安装apk
 2. 打开主页面，输入Test Count，默认是100次
-3. 如果测试RTM，输入Channel Name，默认是wei888,然后点击Rtm Test按钮开始测试
-4. 如果测试WebSocket，输入URL，默认是wss://108.129.196.84:8765,然后点击Ws Test按钮开始测试
+3. 如果测试RTM、RTC和WebSocket，输入Rtm Channel Name 、Rtc Channel Name 和 URL，默认是wei888、wei999和wss://108.129.196.84:8765,然后点击Rtm Test按钮开始测试
+4. 如果测试WebSocket音频，输入URL，默认是wss://108.129.196.84:8765,然后点击Ws Test按钮开始测试
 5. 测试过程中可以点击Stop按钮停止测试
 6. 测试完成后，会显示测试结果，包括连接时间，消息延迟，收到第一条消息的时间
 7. 测试结果会保存在手机的sdcard/Android/data/io.agora.ai.rtm.test/history*.txt路径下
