@@ -112,13 +112,13 @@ class RtcTestManager(context: Context) : TestManagerBase(context),
 //                    System.currentTimeMillis().toString() + "-" + Utils.byteArrayToBase64(audioData)
                 val audioMetaData =
                     System.currentTimeMillis().toString() + "-" + "audioData"
-                writeMessageToFile("Send audio meta data: $audioMetaData")
                 val ret = RtcManager.sendAudioMetadata(audioMetaData.toByteArray())
                 if (ret == 0) {
+                    writeMessageToFile("Send rtc audio meta data: $audioMetaData")
                     audioMetaDataSendCount++
                 } else {
                     audioMetaDataSendFailCount++
-                    updateHistoryUI("Failed to send audio metadata: $audioMetaData ret: $ret")
+                    //updateHistoryUI("Failed to send audio metadata: $audioMetaData ret: $ret")
                 }
 
                 pendingAudioDataByteBuffer?.clear()
@@ -136,12 +136,11 @@ class RtcTestManager(context: Context) : TestManagerBase(context),
         } else {
             val avgDiff = receiverMessageDiffSum / audioMetaDataReceiveCount
             val testTime = System.currentTimeMillis() - testStartTime
-            "Rtc Audio metadata test result: Average delay ${avgDiff}ms, Receive rate: ${audioMetaDataReceiveCount * 100 / audioMetaDataSendCount}%, " +
-                    "Sent: $audioMetaDataSendCount, Received: $audioMetaDataReceiveCount Send Fail Count:${audioMetaDataSendFailCount} in ${
-                        formatTime(
-                            testTime
-                        )
-                    }"
+            "Rtc Audio metadata test result: Average delay ${avgDiff}ms in ${
+                formatTime(
+                    testTime
+                )
+            }"
         }
         updateHistoryUI(averageDiff)
     }
@@ -210,8 +209,7 @@ class RtcTestManager(context: Context) : TestManagerBase(context),
 
                         writeMessageToFile(
                             "Receive rtc audio meta data: ${audioMetaData}, diff: ${diff}ms " +
-                                    "Average diff: ${avgDiff}ms sendCount: $audioMetaDataSendCount " +
-                                    "receiveCount: $audioMetaDataReceiveCount"
+                                    "Average diff: ${avgDiff}ms"
                         )
                     } else {
                         Log.e(TAG, "Failed to parse timestamp from audio metadata: ${parts[0]}")

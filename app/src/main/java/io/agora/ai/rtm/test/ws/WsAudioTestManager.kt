@@ -248,9 +248,8 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
                     currentTime + "-" + Utils.byteArrayToBase64(audioData)
                 writeMessageToFile("Send ws audio data: $currentTime")
                 val ret = WsManager.sendMessage(audioDataStr)
-                if (ret) {
-                    audioDataSendCount++
-                } else {
+                audioDataSendCount++
+                if (!ret) {
                     audioDataSendFailCount++
                     updateHistoryUI("Failed to send ws audio data: $currentTime")
                 }
