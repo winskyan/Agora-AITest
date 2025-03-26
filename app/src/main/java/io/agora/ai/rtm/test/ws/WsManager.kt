@@ -38,6 +38,13 @@ object WsManager {
             .retryOnConnectionFailure(true)
             .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
+            .addInterceptor { chain ->
+                val request = chain.request()
+                Log.d(TAG, "WebSocket request Headers: ${request.headers}")
+                val response = chain.proceed(request)
+                Log.d(TAG, "WebSocket response Headers: ${response.headers}")
+                response
+            }
             .build()
     }
 

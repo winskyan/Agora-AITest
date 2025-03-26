@@ -21,6 +21,7 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
 
     companion object {
         private const val SEND_FRAME_COUNT_ONCE = 6
+        private const val SEND_FRAME_SIZE = 500
     }
 
     // Test configuration
@@ -222,15 +223,20 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
         // Initialize buffer if needed
         if (pendingAudioDataByteBuffer == null) {
             pendingAudioDataByteBuffer =
-                ByteBuffer.allocateDirect(data.size * SEND_FRAME_COUNT_ONCE)
-            updateHistoryUI("Allocated ws test buffer for audio data size: ${data.size} frame count: $SEND_FRAME_COUNT_ONCE")
+                ByteBuffer.allocateDirect(SEND_FRAME_SIZE)
+            updateHistoryUI("Allocated ws test buffer for audio data size: $SEND_FRAME_SIZE")
         }
 
         try {
-            // Now put new data in buffer
-            pendingAudioDataByteBuffer?.put(data)
+            val remainingSpace = pendingAudioDataByteBuffer?.remaining() ?: 0
+            val dataToAdd = if (data.size <= remainingSpace) {
+                pendingAudioDataByteBuffer?.put(data)
+                0
+            } else {
+                pendingAudioDataByteBuffer?.put(data, 0, remainingSpace)
+                data.size - remainingSpace
+            }
 
-            // If buffer is full, process it
             if ((pendingAudioDataByteBuffer?.remaining() ?: 0) == 0) {
                 val position = pendingAudioDataByteBuffer?.position() ?: 0
                 val audioData = ByteArray(position)
@@ -250,9 +256,14 @@ class WsAudioTestManager(context: Context) : TestManagerBase(context) {
                 }
 
                 pendingAudioDataByteBuffer?.clear()
+
+                if (dataToAdd > 0) {
+                    pendingAudioDataByteBuffer?.put(data, data.size - dataToAdd, dataToAdd)
+                }
             }
         } catch (e: BufferOverflowException) {
             Log.e(TAG, "Buffer overflow in sendAudioFrame: ${e.message}, clearing buffer")
+            pendingAudioDataByteBuffer?.clear()
         } catch (e: Exception) {
             Log.e(TAG, "Error in sendAudioFrame: ${e.message}")
         }
