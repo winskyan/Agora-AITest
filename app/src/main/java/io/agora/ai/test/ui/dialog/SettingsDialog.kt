@@ -138,6 +138,11 @@ object SettingsDialog {
                         }
                     }
 
+                    binding.enableEncryptionCb.isChecked = DemoContext.enableEncryption
+                    binding.enableEncryptionCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableEncryption = isChecked
+                    }
+
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
                     createCheckboxes(constraintLayout, config, context)
 

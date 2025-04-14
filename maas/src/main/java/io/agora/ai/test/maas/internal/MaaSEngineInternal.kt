@@ -21,6 +21,7 @@ import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.audio.AdvancedAudioOptions
 import io.agora.rtc2.audio.AudioParams
+import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.VideoEncoderConfiguration
 import io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions
 import kotlinx.coroutines.CoroutineScope
@@ -382,6 +383,43 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 Log.d(
                     MaaSConstants.TAG,
                     "createCustomVideoTrack mVideoTrackerId:$mVideoTrackerId"
+                )
+            }
+
+            if (joinChannelConfig.enableEncryption) {
+                val encryptionConfig = EncryptionConfig()
+                if (joinChannelConfig.encryptionConfig != null) {
+                    encryptionConfig.encryptionKey =
+                        joinChannelConfig.encryptionConfig?.encryptionKey
+                    encryptionConfig.encryptionMode = Utils.getEncryptionMode(
+                        joinChannelConfig.encryptionConfig?.encryptionMode?.value ?: 0
+                    )
+                    joinChannelConfig.encryptionConfig?.encryptionKdfSalt?.let {
+                        System.arraycopy(
+                            it,
+                            0,
+                            encryptionConfig.encryptionKdfSalt,
+                            0,
+                            encryptionConfig.encryptionKdfSalt.size
+                        )
+                    }
+                    Log.d(
+                        MaaSConstants.TAG,
+                        "encryptionConfig mode:${encryptionConfig.encryptionMode} key:${encryptionConfig.encryptionKey} salt:${encryptionConfig.encryptionKdfSalt.contentToString()}"
+                    )
+
+                }
+                val ret = mRtcEngine?.enableEncryption(
+                    joinChannelConfig.enableEncryption,
+                    encryptionConfig
+                )
+                if (ret != 0) {
+                    Log.e(MaaSConstants.TAG, "enableEncryption error: $ret")
+                    return ret ?: MaaSConstants.ERROR_GENERIC
+                }
+                Log.d(
+                    MaaSConstants.TAG,
+                    "enableEncryption success"
                 )
             }
 

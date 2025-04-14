@@ -22,7 +22,7 @@ object DemoContext {
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_SCENARIO, value)
 
     var enableAudio: Boolean
-        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, false)
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, true)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, value)
 
     var enableVideo: Boolean
@@ -83,6 +83,10 @@ object DemoContext {
     var fps: Float
         get() = MMKVUtils.getFloat(Constants.MMKV_KEY_FPS, 15.0f).toFloat()
         set(value) = MMKVUtils.putFloat(Constants.MMKV_KEY_FPS, value)
+
+    var enableEncryption: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_ENCRYPTION, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_ENCRYPTION, value)
 
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()

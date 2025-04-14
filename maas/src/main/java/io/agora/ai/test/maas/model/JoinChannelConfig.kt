@@ -4,8 +4,10 @@ class JoinChannelConfig {
     var enableStereoTest: Boolean = false
     var enableSaveAudio: Boolean = false
     var enablePushExternalVideo: Boolean = false
+    var enableEncryption: Boolean = false
+    var encryptionConfig: MassEncryptionConfig? = null
 
     override fun toString(): String {
-        return "JoinChannelConfig(enableStereoTest=$enableStereoTest, enableSaveAudio=$enableSaveAudio, enablePushExternalVideo=$enablePushExternalVideo)"
+        return "JoinChannelConfig(enableStereoTest=$enableStereoTest, enableSaveAudio=$enableSaveAudio, enablePushExternalVideo=$enablePushExternalVideo, enableEncryption=$enableEncryption, encryptionConfig=$encryptionConfig)"
     }
 }

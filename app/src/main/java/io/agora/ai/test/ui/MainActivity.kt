@@ -21,6 +21,7 @@ import io.agora.ai.test.maas.MaaSEngineEventHandler
 import io.agora.ai.test.maas.model.AudioVolumeInfo
 import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
+import io.agora.ai.test.maas.model.MassEncryptionConfig
 import io.agora.ai.test.maas.model.SceneMode
 import io.agora.ai.test.maas.model.VadConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
@@ -276,10 +277,45 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     "history-${channelName}-${KeyCenter.getRtcUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
                 initWriter()
                 initEngine()
+
+                val config = MassEncryptionConfig()
+
+                if (DemoContext.enableEncryption) {
+                    // 将加密模式设置为 AES_128_GCM2
+                    config.encryptionMode = MassEncryptionConfig.EncryptionMode.AES_128_GCM2
+                    config.encryptionKey =
+                        "oLB41X/IGpxgUMzsYpE+IOpNLOyIbpr8C7qe+mb7QRHkmrELtVsWw6Xr6rQ0XAK03fsBXJJVCkXeL2X7J492qXjR89Q="
+                    val encryptionKdfSalt =
+                        "3t6pvC+qHvVW300B3f+g5J49U3Y×QR40tWKEP/Zz+4=".toByteArray(Charsets.UTF_8)
+                    Log.d(TAG, "encryptionKdfSalt: ${encryptionKdfSalt.size}")
+                    System.arraycopy(
+                        encryptionKdfSalt,
+                        0,
+                        config.encryptionKdfSalt,
+                        0,
+                        config.encryptionKdfSalt.size
+                    )
+                }
+                if (DemoContext.enableVideo) {
+                    mMaaSEngine?.startVideo(
+                        binding.localView,
+                        MaaSConstants.RenderMode.HIDDEN
+                    )
+
+                    mMaaSEngine?.setVideoEncoderConfiguration(
+                        640,
+                        480,
+                        MaaSConstants.FrameRate.FRAME_RATE_FPS_15,
+                        MaaSConstants.OrientationMode.FIXED_LANDSCAPE,
+                        false
+                    )
+                }
                 JoinChannelConfig().apply {
                     enableStereoTest = DemoContext.enableStereoTest
                     enableSaveAudio = DemoContext.enableSaveAudio
                     enablePushExternalVideo = DemoContext.enablePushExternalVideo
+                    enableEncryption = DemoContext.enableEncryption
+                    encryptionConfig = config
                 }.let {
                     mMaaSEngine?.joinChannel(
                         channelName,

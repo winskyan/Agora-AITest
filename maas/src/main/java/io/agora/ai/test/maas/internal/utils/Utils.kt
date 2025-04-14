@@ -2,6 +2,7 @@ package io.agora.ai.test.maas.internal.utils
 
 import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.rtc2.Constants
+import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.VideoEncoderConfiguration
 
 object Utils {
@@ -53,5 +54,19 @@ object Utils {
             options.positionInPortraitMode.height
         )
         return rtcOptions
+    }
+
+    fun getEncryptionMode(mode: Int): EncryptionConfig.EncryptionMode {
+        return when (mode) {
+            1 -> EncryptionConfig.EncryptionMode.AES_128_XTS
+            2 -> EncryptionConfig.EncryptionMode.AES_128_ECB
+            3 -> EncryptionConfig.EncryptionMode.AES_256_XTS
+            4 -> EncryptionConfig.EncryptionMode.SM4_128_ECB
+            5 -> EncryptionConfig.EncryptionMode.AES_128_GCM
+            6 -> EncryptionConfig.EncryptionMode.AES_256_GCM
+            7 -> EncryptionConfig.EncryptionMode.AES_128_GCM2
+            8 -> EncryptionConfig.EncryptionMode.AES_256_GCM2
+            else -> EncryptionConfig.EncryptionMode.MODE_END
+        }
     }
 }
