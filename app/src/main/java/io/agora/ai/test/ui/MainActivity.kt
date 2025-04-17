@@ -316,6 +316,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     enablePushExternalVideo = DemoContext.enablePushExternalVideo
                     enableEncryption = DemoContext.enableEncryption
                     encryptionConfig = config
+                    enablePullAudioFrame = DemoContext.enablePullAudioFrame
                 }.let {
                     mMaaSEngine?.joinChannel(
                         channelName,

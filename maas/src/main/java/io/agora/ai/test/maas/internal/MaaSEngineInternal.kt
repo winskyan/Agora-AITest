@@ -423,6 +423,22 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 )
             }
 
+            if (joinChannelConfig.enablePullAudioFrame) {
+                mRtcEngine?.setExternalAudioSink(true, 16000, 1)
+                CoroutineScope(Dispatchers.IO).launch {
+                    mMaaSEngineConfiguration?.context?.let {
+                        PullAudioFrameManager.start(
+                            it,
+                            mRtcEngine!!,
+                            10,
+                            16000,
+                            1,
+                            true
+                        )
+                    }
+                }
+            }
+
             val ret = mMaaSEngineConfiguration?.userId?.let {
                 mAudioFileName +=
                     channelId + "_" + it + "_" + System.currentTimeMillis() + ".pcm"
@@ -464,6 +480,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             Log.e(MaaSConstants.TAG, "leaveChannel error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
+        PullAudioFrameManager.stop()
         try {
             mRtcEngine?.leaveChannel()
         } catch (e: Exception) {

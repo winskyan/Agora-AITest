@@ -88,6 +88,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_ENCRYPTION, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_ENCRYPTION, value)
 
+    var enablePullAudioFrame: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_PULL_AUDIO_FRAME, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_PULL_AUDIO_FRAME, value)
+
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type

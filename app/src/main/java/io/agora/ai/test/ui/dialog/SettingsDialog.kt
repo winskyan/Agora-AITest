@@ -143,6 +143,11 @@ object SettingsDialog {
                         DemoContext.enableEncryption = isChecked
                     }
 
+                    binding.enablePullAudioFrameCb.isChecked = DemoContext.enablePullAudioFrame
+                    binding.enablePullAudioFrameCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enablePullAudioFrame = isChecked
+                    }
+
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
                     createCheckboxes(constraintLayout, config, context)
 

@@ -22,5 +22,6 @@ object Constants {
     const val MMKV_KEY_ENABLE_PUSH_EXTERNAL_VIDEO = "enablePushExternalVideo"
     const val MMKV_KEY_FPS = "fps"
     const val MMKV_KEY_ENABLE_ENCRYPTION = "enableEncryption"
+    const val MMKV_KEY_ENABLE_PULL_AUDIO_FRAME = "enablePullAudioFrame"
 
 }
