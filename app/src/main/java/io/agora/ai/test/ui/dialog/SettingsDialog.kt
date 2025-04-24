@@ -4,11 +4,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.view.isVisible
 import com.lxj.xpopup.XPopup
 import com.lxj.xpopup.core.BottomPopupView
 import io.agora.ai.test.R
@@ -33,14 +36,17 @@ object SettingsDialog {
             .popupHeight((Utils.getScreenHeight(context) * 0.9).toInt())
             .asCustom(object : BottomPopupView(context) {
 
+                private var _binding: DialogSettingsBinding? = null
+                private val binding get() = _binding!!
+
                 override fun getImplLayoutId(): Int {
                     return R.layout.dialog_settings;
                 }
 
                 @SuppressLint("SetTextI18n")
-                override fun initPopupContent() {
-                    super.initPopupContent()
-                    val binding = DialogSettingsBinding.bind(popupImplView)
+                override fun onCreate() {
+                    super.onCreate()
+                    _binding = DialogSettingsBinding.bind(popupImplView)
 
                     if (DemoContext.appId.isEmpty() && KeyCenter.APP_ID.isNotEmpty()) {
                         DemoContext.appId = KeyCenter.APP_ID
@@ -134,7 +140,7 @@ object SettingsDialog {
                     binding.fpsEt.setText(DemoContext.fps.toString())
                     binding.fpsEt.setOnFocusChangeListener { _, hasFocus ->
                         if (!hasFocus) {
-                            DemoContext.fps = binding.fpsEt.text.toString().toFloat()
+                            DemoContext.fps = binding.fpsEt.text.toString().toFloatOrNull() ?: 15.0f
                         }
                     }
 
@@ -154,20 +160,142 @@ object SettingsDialog {
                         DemoContext.enableSendVideoMetadata = isChecked
                     }
 
-                    val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
-                    createCheckboxes(constraintLayout, config, context)
+                    val paramsLayout = binding.paramsLayout
+                    createCheckboxes(paramsLayout, config, context)
 
-                    val audioProfileLayout =
-                        findViewById<ConstraintLayout>(R.id.audio_profile_layout)
-                    val audioScenarioLayout =
-                        findViewById<ConstraintLayout>(R.id.audio_scenario_layout)
+                    val audioProfileLayout = binding.audioProfileLayout
+                    val audioScenarioLayout = binding.audioScenarioLayout
                     createRadioButtons(audioProfileLayout, context, config.audioProfile, true)
                     createRadioButtons(audioScenarioLayout, context, config.audioScenario, false)
+
+                    // --- App ID Mode Handling --- START
+                    val predefinedAppIds = resources.getStringArray(R.array.predefined_app_ids)
+                    val adapter = ArrayAdapter(
+                        context,
+                        android.R.layout.simple_spinner_item,
+                        predefinedAppIds
+                    )
+                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                    binding.appIdSpinner.adapter = adapter
+
+                    fun updateAppIdViewMode(mode: Int) {
+                        if (mode == Constants.APP_ID_MODE_MANUAL) {
+                            binding.appIdEt.isVisible = true
+                            binding.rtcTokenEt.isVisible = true
+                            binding.appCertificateEt.isVisible = true
+                            binding.appIdSpinner.isVisible = false
+                            binding.manualInputRb.isChecked = true
+
+                            // Restore text if switching back to manual
+                            binding.appIdEt.setText(DemoContext.appId)
+                            binding.rtcTokenEt.setText(DemoContext.rtcToken)
+                            binding.appCertificateEt.setText(DemoContext.appCertificate)
+                        } else { // APP_ID_MODE_SELECT
+                            binding.appIdEt.isVisible = false
+                            binding.rtcTokenEt.isVisible =
+                                false // Assume token/cert handled differently or not needed
+                            binding.appCertificateEt.isVisible = false
+                            binding.appIdSpinner.isVisible = true
+                            binding.selectAppIdRb.isChecked = true
+                            // Set initial spinner selection if needed
+                            val currentAppIdIndex = predefinedAppIds.indexOf(DemoContext.appId)
+                            if (currentAppIdIndex >= 0) {
+                                binding.appIdSpinner.setSelection(currentAppIdIndex)
+                            } else if (predefinedAppIds.isNotEmpty()) {
+                                // Default to first if current not found
+                                binding.appIdSpinner.setSelection(0)
+                                DemoContext.appId = predefinedAppIds[0]
+                                // Clear token/cert when switching to select mode with a default
+                                binding.rtcTokenEt.setText("")
+                                DemoContext.rtcToken = ""
+                                binding.appCertificateEt.setText("")
+                                DemoContext.appCertificate = ""
+                            }
+                        }
+                    }
+
+                    // Set initial view based on saved mode
+                    updateAppIdViewMode(DemoContext.appIdSelectionMode)
+
+                    binding.appIdModeRg.setOnCheckedChangeListener { _, checkedId ->
+                        val newMode = if (checkedId == R.id.manual_input_rb) {
+                            Constants.APP_ID_MODE_MANUAL
+                        } else {
+                            Constants.APP_ID_MODE_SELECT
+                        }
+                        if (newMode != DemoContext.appIdSelectionMode) {
+                            DemoContext.appIdSelectionMode = newMode
+                            updateAppIdViewMode(newMode)
+                        }
+                    }
+
+                    binding.appIdSpinner.onItemSelectedListener =
+                        object : AdapterView.OnItemSelectedListener {
+                            override fun onItemSelected(
+                                parent: AdapterView<*>?,
+                                view: View?,
+                                position: Int,
+                                id: Long
+                            ) {
+                                val selectedAppId = parent?.getItemAtPosition(position) as String
+                                if (DemoContext.appId != selectedAppId) {
+                                    DemoContext.appId = selectedAppId
+                                    // Clear token/cert when selecting from spinner
+                                    binding.rtcTokenEt.setText("")
+                                    DemoContext.rtcToken = ""
+                                    binding.appCertificateEt.setText("")
+                                    DemoContext.appCertificate = ""
+                                }
+                            }
+
+                            override fun onNothingSelected(parent: AdapterView<*>?) {
+                                // Do nothing
+                            }
+                        }
+
+                    // Manual App ID input handling
+                    if (DemoContext.appId.isEmpty() && KeyCenter.APP_ID.isNotEmpty()) {
+                        DemoContext.appId = KeyCenter.APP_ID
+                    }
+                    binding.appIdEt.setText(DemoContext.appId)
+                    binding.appIdEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus && DemoContext.appIdSelectionMode == Constants.APP_ID_MODE_MANUAL) {
+                            DemoContext.appId = binding.appIdEt.text.toString()
+                        }
+                    }
+                    // --- App ID Mode Handling --- END
+
+                    // --- Existing Token/Cert Handling --- START
+                    if (DemoContext.rtcToken.isEmpty() && KeyCenter.RTC_TOKEN.isNotEmpty()) {
+                        DemoContext.rtcToken = KeyCenter.RTC_TOKEN
+                    }
+                    binding.rtcTokenEt.setText(DemoContext.rtcToken)
+                    binding.rtcTokenEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus && DemoContext.appIdSelectionMode == Constants.APP_ID_MODE_MANUAL) {
+                            DemoContext.rtcToken = binding.rtcTokenEt.text.toString()
+                        }
+                    }
+
+                    if (DemoContext.appCertificate.isEmpty() && KeyCenter.APP_CERTIFICATE.isNotEmpty()) {
+                        DemoContext.appCertificate = KeyCenter.APP_CERTIFICATE
+                    }
+                    binding.appCertificateEt.setText(DemoContext.appCertificate)
+                    binding.appCertificateEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus && DemoContext.appIdSelectionMode == Constants.APP_ID_MODE_MANUAL) {
+                            DemoContext.appCertificate = binding.appCertificateEt.text.toString()
+                        }
+                    }
+                    // --- Existing Token/Cert Handling --- END
 
                     binding.okBtn.setOnClickListener {
                         dismiss()
                     }
 
+                }
+
+                override fun onDestroy() {
+                    _binding = null
+                    super.onDestroy()
                 }
 
             })
@@ -206,8 +334,10 @@ object SettingsDialog {
                         constraintSet.connect(
                             checkBox.id,
                             ConstraintSet.TOP,
-                            R.id.params_title_tv,
-                            ConstraintSet.BOTTOM,
+                            if (viewIndex == 1) ConstraintSet.PARENT_ID else (constraintLayout.getChildAt(
+                                constraintLayout.childCount - 2
+                            ) as CheckBox).id,
+                            if (viewIndex == 1) ConstraintSet.TOP else ConstraintSet.BOTTOM,
                             8
                         )
                     } else {

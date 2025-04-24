@@ -96,6 +96,13 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, value)
 
+    var appIdSelectionMode: Int
+        get() = MMKVUtils.getInt(
+            Constants.MMKV_KEY_APP_ID_SELECTION_MODE,
+            Constants.APP_ID_MODE_SELECT
+        )
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_APP_ID_SELECTION_MODE, value)
+
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AgoraAITest</string>
+    <string name="app_name">API Example</string>
     <string name="join">Join</string>
     <string name="leave">Leave</string>
     <string name="enable_video">Enable Video</string>
@@ -15,8 +15,8 @@
     <string name="send_yuv">Send Yuv</string>
     <string name="clear">Clear</string>
     <string name="settings">Settings</string>
-    <string name="ok" translatable="false">OK</string>
-    <string name="params">params</string>
+    <string name="ok">OK</string>
+    <string name="params">Params</string>
     <string name="audio_profile">AudioProfile</string>
     <string name="audio_scenario">AudioScenario</string>
     <string name="enable_rtm">Enable Rtm</string>
@@ -36,5 +36,6 @@
     <string name="app_id">APP ID</string>
     <string name="rtc_token">Rtc Token</string>
     <string name="app_certificate">APP CERTIFICATE</string>
-
+    <string name="manual_input">Manual Input</string>
+    <string name="select_app_id">Select App ID</string>
 </resources>

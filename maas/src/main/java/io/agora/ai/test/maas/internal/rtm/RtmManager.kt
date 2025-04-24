@@ -36,7 +36,10 @@ object RtmManager {
     private var mRtmToken = ""
 
     fun initialize(configuration: MaaSEngineConfiguration) {
-        Log.d(MaaSConstants.TAG, "rtm initialize rtmUserId: ${configuration.rtmUserId}")
+        Log.d(
+            MaaSConstants.TAG,
+            "rtm initialize rtmUserId: ${configuration.rtmUserId} appId: ${configuration.appId} rtmToken: ${configuration.rtmToken}"
+        )
         mLoginSuccess = false
         mRtmToken = configuration.rtmToken.ifEmpty {
             configuration.appId
@@ -137,7 +140,8 @@ object RtmManager {
     }
 
     private fun subscribeMessageChannel(roomName: String) {
-        mRtmClient?.subscribe(roomName,
+        mRtmClient?.subscribe(
+            roomName,
             object : SubscribeOptions() {
                 init {
                     withMessage = true
@@ -156,7 +160,8 @@ object RtmManager {
     }
 
     private fun unsubscribeMessageChannel(roomName: String) {
-        mRtmClient?.unsubscribe(roomName,
+        mRtmClient?.unsubscribe(
+            roomName,
             object : ResultCallback<Void> {
                 override fun onSuccess(p0: Void?) {
                     Log.d(MaaSConstants.TAG, "rtm unsubscribe message channel onSuccess")
@@ -282,17 +287,19 @@ object RtmManager {
             override fun onSuccess(p0: Void?) {
                 Log.d(MaaSConstants.TAG, "rtm logout onSuccess")
                 mLoginSuccess = false
-                release()
+
             }
 
             override fun onFailure(p0: ErrorInfo?) {
                 Log.d(MaaSConstants.TAG, "rtm logout onFailure: $p0")
             }
         })
+
+        release()
     }
 
     private fun release() {
-//      RtmClient.release()
+        RtmClient.release()
         mRtmClient = null
         mStreamChannel = null
         mRtmToken = ""
