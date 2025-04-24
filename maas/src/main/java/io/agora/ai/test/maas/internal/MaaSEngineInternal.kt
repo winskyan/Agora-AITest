@@ -16,12 +16,14 @@ import io.agora.rtc2.ChannelMediaOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.DataStreamConfig
 import io.agora.rtc2.IAudioFrameObserver
+import io.agora.rtc2.IMetadataObserver
 import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.audio.AdvancedAudioOptions
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.internal.EncryptionConfig
+import io.agora.rtc2.video.AgoraMetadata
 import io.agora.rtc2.video.VideoEncoderConfiguration
 import io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +49,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     private val executor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val scope = CoroutineScope(executor)
+
+    private var mVideoMetadataObserver: IMetadataObserver? = null
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -439,6 +443,35 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 }
             }
 
+            if (joinChannelConfig.enableSendVideoMetadata) {
+                mVideoMetadataObserver = object : IMetadataObserver {
+                    override fun getMaxMetadataSize(): Int {
+                        return 1024
+                    }
+
+                    override fun onReadyToSendMetadata(
+                        timeStampMs: Long,
+                        sourceType: Int
+                    ): ByteArray {
+                        val metadataString = "Timestamp:${System.currentTimeMillis()}"
+                        val metadata = metadataString.toByteArray(Charsets.UTF_8)
+                        Log.d(MaaSConstants.TAG, "onReadyToSendMetadata:$metadataString")
+                        return metadata
+                    }
+
+                    override fun onMetadataReceived(metadata: AgoraMetadata?) {
+                        Log.d(
+                            MaaSConstants.TAG,
+                            "onMetadataReceived channelId:${metadata?.channelId},uid:${metadata?.uid},data:${metadata?.data?.contentToString()},timeStampMs:${metadata?.timeStampMs}"
+                        )
+                    }
+                }
+                mRtcEngine?.registerMediaMetadataObserver(
+                    mVideoMetadataObserver,
+                    IMetadataObserver.VIDEO_METADATA
+                )
+                Log.d(MaaSConstants.TAG, "registerMediaMetadataObserver success")
+            }
             val ret = mMaaSEngineConfiguration?.userId?.let {
                 mAudioFileName +=
                     channelId + "_" + it + "_" + System.currentTimeMillis() + ".pcm"
@@ -656,7 +689,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
     }
 
-    override fun addVideoWatermark(watermarkUrl: String, watermarkOptions: WatermarkOptions): Int {
+    override fun addVideoWatermark(
+        watermarkUrl: String,
+        watermarkOptions: WatermarkOptions
+    ): Int {
         Log.d(
             MaaSConstants.TAG,
             "addVideoWatermark watermarkUrl:$watermarkUrl watermarkOptions:$watermarkOptions"
@@ -888,7 +924,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     private fun pushExternalVideoFrameByIdInternal(videoFrame: VideoFrame, trackId: Int): Int {
         if (mRtcEngine == null) {
-            Log.e(MaaSConstants.TAG, "pushExternalVideoFrameByIdInternal error: not initialized")
+            Log.e(
+                MaaSConstants.TAG,
+                "pushExternalVideoFrameByIdInternal error: not initialized"
+            )
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
         val ret = mRtcEngine?.pushExternalVideoFrameById(videoFrame, trackId)
@@ -912,6 +951,13 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     }
 
     override fun doDestroy() {
+        if (null != mVideoMetadataObserver) {
+            mRtcEngine?.unregisterMediaMetadataObserver(
+                mVideoMetadataObserver,
+                IMetadataObserver.VIDEO_METADATA
+            )
+            mVideoMetadataObserver = null
+        }
         RtcEngine.destroy()
         if (mMaaSEngineConfiguration?.enableRtm == true) {
             RtmManager.rtmLogout()

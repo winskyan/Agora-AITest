@@ -317,6 +317,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     enableEncryption = DemoContext.enableEncryption
                     encryptionConfig = config
                     enablePullAudioFrame = DemoContext.enablePullAudioFrame
+                    enableSendVideoMetadata = DemoContext.enableSendVideoMetadata
                 }.let {
                     mMaaSEngine?.joinChannel(
                         channelName,
@@ -530,7 +531,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private fun sendRtcAudioMetadata() {
         val currentTime = System.currentTimeMillis()
         mSendRtcAudioMetadata = "RtcAudioMetadata:$currentTime"
-        mMaaSEngine?.sendAudioMetadata(mSendRtcAudioMetadata.toByteArray(Charsets.UTF_8))
+        val ret = mMaaSEngine?.sendAudioMetadata(mSendRtcAudioMetadata.toByteArray(Charsets.UTF_8))
+        if (ret != 0) {
+            Log.e(TAG, "sendAudioMetadata ret:$ret")
+        }
         mSendRtcAudioMetadataTime = currentTime
         updateHistoryUI("SendRtcAudioMetadata:$mSendRtcAudioMetadata")
     }

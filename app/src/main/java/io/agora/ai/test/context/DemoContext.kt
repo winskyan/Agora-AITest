@@ -92,6 +92,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_PULL_AUDIO_FRAME, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_PULL_AUDIO_FRAME, value)
 
+    var enableSendVideoMetadata: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, value)
+
     fun parseConfigJson(jsonString: String): Config {
         val gson = Gson()
         val configType = object : TypeToken<Config>() {}.type

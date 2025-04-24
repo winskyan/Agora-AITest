@@ -29,6 +29,7 @@
     <string name="enable_push_external_video">Enable Push External Video</string>
     <string name="enable_encryption">Enable Encryption</string>
     <string name="enable_pull_audio_frame">Enable Pull Audio Frame</string>
+    <string name="enable_send_video_metadata">Enable Send Video Metadata</string>
     <string name="client_role_type">Role</string>
     <string name="client_role_type_broadcaster">Broadcaster</string>
     <string name="client_role_type_audience">Audience</string>

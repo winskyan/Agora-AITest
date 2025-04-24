@@ -148,6 +148,12 @@ object SettingsDialog {
                         DemoContext.enablePullAudioFrame = isChecked
                     }
 
+                    binding.enableSendVideoMetadataCb.isChecked =
+                        DemoContext.enableSendVideoMetadata
+                    binding.enableSendVideoMetadataCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableSendVideoMetadata = isChecked
+                    }
+
                     val constraintLayout = findViewById<ConstraintLayout>(R.id.params_layout)
                     createCheckboxes(constraintLayout, config, context)
 
