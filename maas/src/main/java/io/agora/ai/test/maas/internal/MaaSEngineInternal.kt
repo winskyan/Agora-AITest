@@ -51,6 +51,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private val scope = CoroutineScope(executor)
 
     private var mVideoMetadataObserver: IMetadataObserver? = null
+    private var mJoinChannelConfig: JoinChannelConfig? = null
+    private var mChannelId = ""
+    private var mLocalUserId = 0
+    private var mRemoteUserId = 0
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -77,6 +81,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                         MaaSConstants.TAG,
                         "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
                     )
+                    mLocalUserId = uid
                     if (-1 == mDataStreamId) {
                         val cfg = DataStreamConfig()
                         cfg.syncWithAudio = false
@@ -93,6 +98,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
                 override fun onUserJoined(uid: Int, elapsed: Int) {
                     Log.d(MaaSConstants.TAG, "onUserJoined uid:$uid elapsed:$elapsed")
+                    mRemoteUserId = uid
                     mEventCallback?.onUserJoined(uid, elapsed)
                 }
 
@@ -373,6 +379,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             MaaSConstants.TAG,
             "joinChannel channelId:$channelId roleType:$roleType joinChannelConfig:$joinChannelConfig"
         )
+        mChannelId = channelId
+        mJoinChannelConfig = joinChannelConfig
         if (mRtcEngine == null) {
             Log.e(MaaSConstants.TAG, "joinChannel error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
@@ -516,6 +524,12 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
         PullAudioFrameManager.stop()
         try {
+//            val leaveParams =
+//                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": false}}"
+//            mRtcEngine?.setParameters(leaveParams)
+//            Log.d(MaaSConstants.TAG, "setParameters $leaveParams")
+            Thread.sleep(50)
+
             mRtcEngine?.leaveChannel()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -969,6 +983,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         mEventCallback = null
         mDataStreamId = -1
         mAudioFileName = ""
+        mLocalUserId = 0
+        mRemoteUserId = 0
+        mChannelId = ""
+        mJoinChannelConfig = null
         Log.d(MaaSConstants.TAG, "rtc destroy")
     }
 
