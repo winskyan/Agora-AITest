@@ -335,7 +335,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 buffer: ByteBuffer?,
                 renderTimeMs: Long,
                 avsync_type: Int,
-                rtpTimestamp: Int
+                rtpTimestamp: Int,
+                presentationMs: Long
             ): Boolean {
                 saveAudioFrame(buffer)
                 return true
@@ -733,13 +734,14 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
 
-        val ret = mRtcEngine?.addVideoWatermark(
-            data,
-            width,
-            height,
-            format.value,
-            Utils.getRtcWatermarkOptions(options)
-        )
+//        val ret = mRtcEngine?.addVideoWatermark(
+//            data,
+//            width,
+//            height,
+//            format.value,
+//            Utils.getRtcWatermarkOptions(options)
+//        )
+        val ret = MaaSConstants.ERROR_GENERIC
         Log.d(
             MaaSConstants.TAG,
             "addVideoWatermark ret:$ret"
