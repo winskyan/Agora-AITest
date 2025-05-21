@@ -11,7 +11,7 @@ easypermissions = "3.0.0"
 xpopup = "2.7.5"
 agora-authentication = "2.0.0"
 agora-rtc = "4.5.1.231.WPS"
-agora-rtm = "2.2.2"
+agora-rtm = "2.2.4.1"
 commons-codec = "1.16.0"
 maas = "0.1"
 gson = "2.8.8"
@@ -30,7 +30,7 @@ commons-codec = { group = "commons-codec", name = "commons-codec", version.ref =
 agora-authentication = { group = "io.agora", name = "authentication", version.ref = "agora-authentication" }
 agora-rtc = { group = "io.agora.rtc", name = "agora-special-full", version.ref = "agora-rtc" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
-agora-rtm = { group = "io.agora", name = "agora-rtm", version.ref = "agora-rtm" }
+agora-rtm = { group = "io.agora", name = "agora-rtm-special-lite", version.ref = "agora-rtm" }
 mmkv = { group = "com.tencent", name = "mmkv-static", version.ref = "mmkv" }
 
 [plugins]

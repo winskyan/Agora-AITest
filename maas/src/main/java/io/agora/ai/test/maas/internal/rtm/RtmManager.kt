@@ -107,6 +107,8 @@ object RtmManager {
         try {
             mRtmClient = RtmClient.create(rtmConfig)
 
+            //mRtmClient?.setParameters("{\"rtm.test.mock_crash\": true}")
+
             mRtmClient?.login(
                 mRtmToken,
                 object : ResultCallback<Void> {
@@ -312,6 +314,7 @@ object RtmManager {
             sendStreamMessage(message)
             return
         }
+
 
         Log.d(
             MaaSConstants.TAG,
