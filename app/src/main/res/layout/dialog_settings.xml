@@ -221,6 +221,15 @@
                     android:textSize="15sp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/enable_pull_audio_frame_cb" />
+
+                <CheckBox
+                    android:id="@+id/enable_destroy_rtc_when_leave_channel_cb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/enable_destroy_rtc_when_leave_channel"
+                    android:textSize="15sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/enable_send_video_metadata_cb" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView

@@ -9,7 +9,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
 import io.agora.ai.test.constants.Constants
 import io.agora.ai.test.databinding.ActivityTestBinding
-import io.agora.ai.test.ui.dialog.SettingsDialog
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import kotlin.system.exitProcess
@@ -102,10 +101,6 @@ class TestActivity : AppCompatActivity() {
 
     private fun initView() {
         handleOnBackPressed()
-
-        binding.toolbarSetting.setOnClickListener {
-            SettingsDialog.showSettingsDialog(this)
-        }
 
         binding.btnJoin.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))

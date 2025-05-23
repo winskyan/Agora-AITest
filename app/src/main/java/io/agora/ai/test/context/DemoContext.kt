@@ -96,6 +96,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_SEND_VIDEO_METADATA, value)
 
+    var enableDestroyRtcWhenLeaveChannel: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_DESTROY_RTC_WHEN_LEAVE_CHANNEL, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_DESTROY_RTC_WHEN_LEAVE_CHANNEL, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,

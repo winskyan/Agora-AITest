@@ -160,6 +160,12 @@ object SettingsDialog {
                         DemoContext.enableSendVideoMetadata = isChecked
                     }
 
+                    binding.enableDestroyRtcWhenLeaveChannelCb.isChecked =
+                        DemoContext.enableDestroyRtcWhenLeaveChannel
+                    binding.enableDestroyRtcWhenLeaveChannelCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableDestroyRtcWhenLeaveChannel = isChecked
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 
