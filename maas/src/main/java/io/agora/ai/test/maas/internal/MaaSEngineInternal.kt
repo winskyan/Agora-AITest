@@ -59,8 +59,12 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
         if (configuration.context == null || configuration.eventHandler == null) {
-            Log.e(MaaSConstants.TAG, "initialize error: already initialized")
+            Log.e(MaaSConstants.TAG, "initialize error: context or eventHandler is null")
             return MaaSConstants.ERROR_INVALID_PARAMS
+        }
+        if (mRtcEngine != null) {
+            Log.i(MaaSConstants.TAG, "initialize error: already initialized")
+            return MaaSConstants.OK
         }
         Log.d(MaaSConstants.TAG, "maas version:" + getSdkVersion())
 
@@ -154,6 +158,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             )
             mRtcEngine?.setAudioProfile(configuration.audioProfile)
             mRtcEngine?.setAudioScenario(configuration.audioScenario)
+
+            //mRtcEngine?.setParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"120000000\",\"uuid\":\"123456789\",\"duration\":\"1200000\"}}")
 
             mRtcEngine?.setParameters("{\"rtc.enable_debug_log\":true}")
 
@@ -500,6 +506,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                         }
                     })
             } ?: MaaSConstants.ERROR_INVALID_PARAMS
+
+            val joinParams =
+                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": true}}"
+            mRtcEngine?.setParameters(joinParams)
             Log.d(
                 MaaSConstants.TAG, "joinChannel ret:$ret"
             )
@@ -524,11 +534,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
         PullAudioFrameManager.stop()
         try {
-//            val leaveParams =
-//                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": false}}"
-//            mRtcEngine?.setParameters(leaveParams)
-//            Log.d(MaaSConstants.TAG, "setParameters $leaveParams")
-            Thread.sleep(50)
+            val leaveParams =
+                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": false}}"
+            mRtcEngine?.setParameters(leaveParams)
+            Log.d(MaaSConstants.TAG, "setParameters $leaveParams")
+            Thread.sleep(300)
 
             mRtcEngine?.leaveChannel()
         } catch (e: Exception) {

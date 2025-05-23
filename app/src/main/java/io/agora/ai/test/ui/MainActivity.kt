@@ -265,7 +265,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 }
 
                 mMaaSEngine?.leaveChannel()
-                MaaSEngine.destroy()
+                if (DemoContext.enableDestroyRtcWhenLeaveChannel) {
+                    MaaSEngine.destroy()
+                }
                 closeWriter()
             } else {
                 initData()
