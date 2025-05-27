@@ -20,6 +20,7 @@ import io.agora.rtc2.IMetadataObserver
 import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
+import io.agora.rtc2.RtcEngineConfig.LogConfig
 import io.agora.rtc2.audio.AdvancedAudioOptions
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.internal.EncryptionConfig
@@ -149,6 +150,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                     mEventCallback?.onAudioMetadataReceived(uid, data)
                 }
             }
+
+            val logConfig = LogConfig()
+            logConfig.level = Constants.LOG_LEVEL_INFO
+            rtcEngineConfig.mLogConfig = logConfig
 
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
 
