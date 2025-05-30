@@ -8,23 +8,23 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
 import io.agora.ai.test.constants.Constants
-import io.agora.ai.test.databinding.ActivityTestBinding
+import io.agora.ai.test.databinding.ActivityFirstBinding
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import kotlin.system.exitProcess
 
-class TestActivity : AppCompatActivity() {
+class FirstActivity : AppCompatActivity() {
     companion object {
-        const val TAG: String = Constants.TAG + "-TestActivity"
+        const val TAG: String = Constants.TAG + "-FirstActivity"
         const val MY_PERMISSIONS_REQUEST_CODE = 123
     }
 
-    private lateinit var binding: ActivityTestBinding
+    private lateinit var binding: ActivityFirstBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "Main1 onCreate")
-        binding = ActivityTestBinding.inflate(layoutInflater)
+        Log.d(TAG, "FirstActivity onCreate")
+        binding = ActivityFirstBinding.inflate(layoutInflater)
         setContentView(binding.root)
         checkPermissions()
         initView()
@@ -32,27 +32,27 @@ class TestActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "Test onResume")
+        Log.d(TAG, "FirstActivity onResume")
     }
 
     override fun onStart() {
         super.onStart()
-        Log.d(TAG, "Test onStart")
+        Log.d(TAG, "FirstActivity onStart")
     }
 
     override fun onRestart() {
         super.onRestart()
-        Log.d(TAG, "Test onRestart")
+        Log.d(TAG, "FirstActivity onRestart")
     }
 
     override fun onStop() {
         super.onStop()
-        Log.d(TAG, "Test onStop")
+        Log.d(TAG, "FirstActivity onStop")
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "Test onDestroy")
+        Log.d(TAG, "FirstActivity onDestroy")
     }
 
     private fun checkPermissions() {
@@ -111,7 +111,7 @@ class TestActivity : AppCompatActivity() {
     private fun handleOnBackPressed() {
         val onBackPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                val xPopup = XPopup.Builder(this@TestActivity)
+                val xPopup = XPopup.Builder(this@FirstActivity)
                     .asConfirm("退出", "确认退出程序", {
                         exit()
                     }, {})

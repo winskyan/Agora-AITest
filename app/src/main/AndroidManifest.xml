@@ -33,7 +33,7 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
-            android:name=".ui.TestActivity"
+            android:name=".ui.FirstActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
