@@ -24,7 +24,7 @@ object Constants {
     const val MMKV_KEY_ENABLE_ENCRYPTION = "enableEncryption"
     const val MMKV_KEY_ENABLE_PULL_AUDIO_FRAME = "enablePullAudioFrame"
     const val MMKV_KEY_ENABLE_SEND_VIDEO_METADATA = "enableSendVideoMetadata"
-    const val MMKV_KEY_ENABLE_DESTROY_RTC_WHEN_LEAVE_CHANNEL = "enableDestroyRtcWhenLeaveChannel"
+    const val MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY = "enableLeaveChannelWithoutDestroy"
     const val MMKV_KEY_APP_ID_SELECTION_MODE = "appIdSelectionMode"
 
     const val APP_ID_MODE_MANUAL = 0

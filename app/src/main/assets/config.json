@@ -55,5 +55,11 @@
     {
       "meeting": 8
     }
+    ,{
+      "ai_server": 9
+    },
+    {
+      "ai_client": 10
+    }
   ]
 }
