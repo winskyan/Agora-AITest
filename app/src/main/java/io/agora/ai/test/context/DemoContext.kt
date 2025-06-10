@@ -100,6 +100,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY, value)
 
+    var enableCustomDirectAudioTracker: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,

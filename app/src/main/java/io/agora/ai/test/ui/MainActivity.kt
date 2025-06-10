@@ -26,6 +26,7 @@ import io.agora.ai.test.maas.model.SceneMode
 import io.agora.ai.test.maas.model.VadConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.ai.test.ui.dialog.SettingsDialog
+import io.agora.ai.test.utils.AudioFileReader
 import io.agora.ai.test.utils.KeyCenter
 import io.agora.ai.test.utils.Utils
 import io.agora.ai.test.utils.VideoFileReader
@@ -87,6 +88,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private lateinit var bufferedWriter: BufferedWriter
 
     private var mVideoFileReader: VideoFileReader? = null
+    private var mAudioFileReader: AudioFileReader? = null
+
+    private var mJoinChannelConfig: JoinChannelConfig = JoinChannelConfig()
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -253,6 +257,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
+                mAudioFileReader?.stop()
                 stopSendYuv()
                 stopSendingMessagesTest()
                 if (DemoContext.enableAudio) {
@@ -312,7 +317,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                         false
                     )
                 }
-                JoinChannelConfig().apply {
+                mJoinChannelConfig = JoinChannelConfig().apply {
                     enableStereoTest = DemoContext.enableStereoTest
                     enableSaveAudio = DemoContext.enableSaveAudio
                     enablePushExternalVideo = DemoContext.enablePushExternalVideo
@@ -320,15 +325,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     encryptionConfig = config
                     enablePullAudioFrame = DemoContext.enablePullAudioFrame
                     enableSendVideoMetadata = DemoContext.enableSendVideoMetadata
-                }.let {
-                    mMaaSEngine?.joinChannel(
-                        channelName,
-                        DemoContext.clientRoleType,
-                        it
-                    )
-
+                    enableCustomDirectAudioTracker = DemoContext.enableCustomDirectAudioTracker
                 }
-
+                mMaaSEngine?.joinChannel(
+                    channelName,
+                    DemoContext.clientRoleType,
+                    mJoinChannelConfig
+                )
             }
         }
 
@@ -621,6 +624,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         runOnUiThread {
             updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid)")
             updateUI()
+            handleJoinChannelSuccess()
         }
     }
 
@@ -630,7 +634,6 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         runOnUiThread {
             updateToolbarTitle(getString(R.string.app_name))
             updateUI()
-
         }
     }
 
@@ -775,6 +778,41 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 bufferedWriter.flush()
             } catch (e: IOException) {
                 Log.e(TAG, "Error writing message to file", e)
+            }
+        }
+    }
+
+    private fun handleJoinChannelSuccess() {
+        if (mJoinChannelConfig.enableCustomDirectAudioTracker) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val fileBytes =
+                    Utils.readAssetBytesContent(applicationContext, "tts_out_48k_1ch.pcm")
+                Log.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
+                mMaaSEngine?.pushExternalAudioFrame(
+                    fileBytes,
+                    System.currentTimeMillis(),
+                    48000, 1, 2
+                )
+
+                mAudioFileReader = AudioFileReader(
+                    applicationContext,
+                    "nearin_power_48k_1ch.pcm", 48000, 1, 10,
+                    object : AudioFileReader.OnAudioReadListener {
+                        override fun onAudioRead(buffer: ByteArray?, timestamp: Long) {
+                            if (buffer != null) {
+                                mAudioFileReader?.let {
+                                    mMaaSEngine?.pushExternalAudioFrame(
+                                        buffer,
+                                        timestamp,
+                                        it.getSampleRate(),
+                                        it.getNumOfChannels(),
+                                        it.getBytePerSample()
+                                    )
+                                }
+                            }
+                        }
+                    })
+                mAudioFileReader?.start()
             }
         }
     }

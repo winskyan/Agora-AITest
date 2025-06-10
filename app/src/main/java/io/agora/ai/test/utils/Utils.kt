@@ -48,6 +48,17 @@ class Utils {
             return content
         }
 
+        fun readAssetBytesContent(context: Context, fileName: String): ByteArray {
+            return try {
+                context.assets.open(fileName).use { inputStream ->
+                    inputStream.readBytes()
+                }
+            } catch (e: IOException) {
+                e.printStackTrace()
+                ByteArray(0)
+            }
+        }
+
         fun hideKeyboard(context: Context, view: View) {
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.hideSoftInputFromWindow(view.windowToken, 0)

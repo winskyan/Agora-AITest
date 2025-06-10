@@ -166,6 +166,12 @@ object SettingsDialog {
                         DemoContext.enableLeaveChannelWithoutDestroy = isChecked
                     }
 
+                    binding.enableCustomDirectAudioTrackerCb.isChecked =
+                        DemoContext.enableCustomDirectAudioTracker
+                    binding.enableCustomDirectAudioTrackerCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableCustomDirectAudioTracker = isChecked
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 

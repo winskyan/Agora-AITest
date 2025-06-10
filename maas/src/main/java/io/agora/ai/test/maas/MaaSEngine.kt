@@ -73,6 +73,14 @@ abstract class MaaSEngine {
         type: MaaSConstants.ViewFrameType
     ): Int
 
+    abstract fun pushExternalAudioFrame(
+        data: ByteArray,
+        timestamp: Long,
+        sampleRate: Int,
+        channels: Int,
+        bytesPerSample: Int
+    ): Int
+
     protected abstract fun doDestroy()
 
     companion object {

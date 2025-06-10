@@ -31,6 +31,7 @@
     <string name="enable_pull_audio_frame">Enable Pull Audio Frame</string>
     <string name="enable_send_video_metadata">Enable Send Video Metadata</string>
     <string name="enable_leave_channel_without_destroy">Enable Leave Channel Without Destroy</string>
+    <string name="enable_custom_direct_audio_tracker">Enable Custom Direct Audio Tracker</string>
     <string name="client_role_type">Role</string>
     <string name="client_role_type_broadcaster">Broadcaster</string>
     <string name="client_role_type_audience">Audience</string>

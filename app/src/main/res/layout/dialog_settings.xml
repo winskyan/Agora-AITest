@@ -230,6 +230,15 @@
                     android:textSize="15sp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/enable_send_video_metadata_cb" />
+
+                <CheckBox
+                    android:id="@+id/enable_custom_direct_audio_tracker_cb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/enable_custom_direct_audio_tracker"
+                    android:textSize="15sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/enable_leave_channel_without_destroy_cb" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView

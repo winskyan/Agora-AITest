@@ -26,6 +26,7 @@ object Constants {
     const val MMKV_KEY_ENABLE_SEND_VIDEO_METADATA = "enableSendVideoMetadata"
     const val MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY = "enableLeaveChannelWithoutDestroy"
     const val MMKV_KEY_APP_ID_SELECTION_MODE = "appIdSelectionMode"
+    const val MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER = "enableCustomDirectAudioTracker"
 
     const val APP_ID_MODE_MANUAL = 0
     const val APP_ID_MODE_SELECT = 1

@@ -23,6 +23,7 @@ import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineConfig.LogConfig
 import io.agora.rtc2.audio.AdvancedAudioOptions
 import io.agora.rtc2.audio.AudioParams
+import io.agora.rtc2.audio.AudioTrackConfig
 import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.AgoraMetadata
 import io.agora.rtc2.video.VideoEncoderConfiguration
@@ -56,6 +57,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mChannelId = ""
     private var mLocalUserId = 0
     private var mRemoteUserId = 0
+
+    private var mCustomAudioTrackId = -1
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -172,6 +175,20 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 mRtcEngine?.setParameters(params)
                 Log.d(MaaSConstants.TAG, "setParameters:$params")
             }
+
+//            mRtcEngine?.setParameters("{\"che.audio.aec.split_srate_for_48k\":16000}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.enabled\":true}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.stftType\":6}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.ainlpLowLatencyFlag\":1}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.ainsLowLatencyFlag \":1}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.procChainMode\":1}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.nlpDynamicMode\":1}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.nlpAlgRoute\":0}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.ainlpModelPref\":10}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.nsngAlgRoute\":12}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.ainsModelPref\":10}")
+//            mRtcEngine?.setParameters("{\"che.audio.sf.nsngPredefAgg\":11}")
+//            mRtcEngine?.setParameters("{\"che.audio.agc.enable\":false}")
 
 //            mRtcEngine?.setParameters("{\"che.audio.aec.enable\":false}")
 //            mRtcEngine?.setParameters("{\"che.audio.ans.enable\":false}")
@@ -397,100 +414,9 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
         try {
-            registerAudioFrame(
-                joinChannelConfig.enableStereoTest,
-                joinChannelConfig.enableSaveAudio
-            )
-
-            if (joinChannelConfig.enablePushExternalVideo) {
-                mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
-                Log.d(
-                    MaaSConstants.TAG,
-                    "createCustomVideoTrack mVideoTrackerId:$mVideoTrackerId"
-                )
-            }
-
-            if (joinChannelConfig.enableEncryption) {
-                val encryptionConfig = EncryptionConfig()
-                if (joinChannelConfig.encryptionConfig != null) {
-                    encryptionConfig.encryptionKey =
-                        joinChannelConfig.encryptionConfig?.encryptionKey
-                    encryptionConfig.encryptionMode = Utils.getEncryptionMode(
-                        joinChannelConfig.encryptionConfig?.encryptionMode?.value ?: 0
-                    )
-                    joinChannelConfig.encryptionConfig?.encryptionKdfSalt?.let {
-                        System.arraycopy(
-                            it,
-                            0,
-                            encryptionConfig.encryptionKdfSalt,
-                            0,
-                            encryptionConfig.encryptionKdfSalt.size
-                        )
-                    }
-                    Log.d(
-                        MaaSConstants.TAG,
-                        "encryptionConfig mode:${encryptionConfig.encryptionMode} key:${encryptionConfig.encryptionKey} salt:${encryptionConfig.encryptionKdfSalt.contentToString()}"
-                    )
-
-                }
-                val ret = mRtcEngine?.enableEncryption(
-                    joinChannelConfig.enableEncryption,
-                    encryptionConfig
-                )
-                if (ret != 0) {
-                    Log.e(MaaSConstants.TAG, "enableEncryption error: $ret")
-                    return ret ?: MaaSConstants.ERROR_GENERIC
-                }
-                Log.d(
-                    MaaSConstants.TAG,
-                    "enableEncryption success"
-                )
-            }
-
-            if (joinChannelConfig.enablePullAudioFrame) {
-                mRtcEngine?.setExternalAudioSink(true, 16000, 1)
-                CoroutineScope(Dispatchers.IO).launch {
-                    mMaaSEngineConfiguration?.context?.let {
-                        PullAudioFrameManager.start(
-                            it,
-                            mRtcEngine!!,
-                            10,
-                            16000,
-                            1,
-                            true
-                        )
-                    }
-                }
-            }
-
-            if (joinChannelConfig.enableSendVideoMetadata) {
-                mVideoMetadataObserver = object : IMetadataObserver {
-                    override fun getMaxMetadataSize(): Int {
-                        return 1024
-                    }
-
-                    override fun onReadyToSendMetadata(
-                        timeStampMs: Long,
-                        sourceType: Int
-                    ): ByteArray {
-                        val metadataString = "Timestamp:${System.currentTimeMillis()}"
-                        val metadata = metadataString.toByteArray(Charsets.UTF_8)
-                        Log.d(MaaSConstants.TAG, "onReadyToSendMetadata:$metadataString")
-                        return metadata
-                    }
-
-                    override fun onMetadataReceived(metadata: AgoraMetadata?) {
-                        Log.d(
-                            MaaSConstants.TAG,
-                            "onMetadataReceived channelId:${metadata?.channelId},uid:${metadata?.uid},data:${metadata?.data?.contentToString()},timeStampMs:${metadata?.timeStampMs}"
-                        )
-                    }
-                }
-                mRtcEngine?.registerMediaMetadataObserver(
-                    mVideoMetadataObserver,
-                    IMetadataObserver.VIDEO_METADATA
-                )
-                Log.d(MaaSConstants.TAG, "registerMediaMetadataObserver success")
+            val handleConfigRet = handleJoinChannelConfig(joinChannelConfig)
+            if (handleConfigRet != MaaSConstants.OK) {
+                return handleConfigRet
             }
             val ret = mMaaSEngineConfiguration?.userId?.let {
                 mAudioFileName +=
@@ -508,6 +434,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                             publishCustomVideoTrack = joinChannelConfig.enablePushExternalVideo
                             customVideoTrackId = mVideoTrackerId
                             clientRoleType = roleType
+                            publishCustomAudioTrack =
+                                joinChannelConfig.enableCustomDirectAudioTracker
+                            publishCustomAudioTrackId = mCustomAudioTrackId
+                            publishMicrophoneTrack =
+                                !joinChannelConfig.enableCustomDirectAudioTracker
                         }
                     })
             } ?: MaaSConstants.ERROR_INVALID_PARAMS
@@ -528,6 +459,120 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         if (mMaaSEngineConfiguration?.enableRtm == true) {
             RtmManager.joinChannel(channelId)
         }
+        return MaaSConstants.OK
+    }
+
+    private fun handleJoinChannelConfig(joinChannelConfig: JoinChannelConfig): Int {
+        registerAudioFrame(
+            joinChannelConfig.enableStereoTest,
+            joinChannelConfig.enableSaveAudio
+        )
+
+        if (joinChannelConfig.enablePushExternalVideo) {
+            mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
+            Log.d(
+                MaaSConstants.TAG,
+                "createCustomVideoTrack mVideoTrackerId:$mVideoTrackerId"
+            )
+        }
+
+        if (joinChannelConfig.enableEncryption) {
+            val encryptionConfig = EncryptionConfig()
+            if (joinChannelConfig.encryptionConfig != null) {
+                encryptionConfig.encryptionKey =
+                    joinChannelConfig.encryptionConfig?.encryptionKey
+                encryptionConfig.encryptionMode = Utils.getEncryptionMode(
+                    joinChannelConfig.encryptionConfig?.encryptionMode?.value ?: 0
+                )
+                joinChannelConfig.encryptionConfig?.encryptionKdfSalt?.let {
+                    System.arraycopy(
+                        it,
+                        0,
+                        encryptionConfig.encryptionKdfSalt,
+                        0,
+                        encryptionConfig.encryptionKdfSalt.size
+                    )
+                }
+                Log.d(
+                    MaaSConstants.TAG,
+                    "encryptionConfig mode:${encryptionConfig.encryptionMode} key:${encryptionConfig.encryptionKey} salt:${encryptionConfig.encryptionKdfSalt.contentToString()}"
+                )
+
+            }
+            val ret = mRtcEngine?.enableEncryption(
+                joinChannelConfig.enableEncryption,
+                encryptionConfig
+            )
+            if (ret != 0) {
+                Log.e(MaaSConstants.TAG, "enableEncryption error: $ret")
+                return ret ?: MaaSConstants.ERROR_GENERIC
+            }
+            Log.d(
+                MaaSConstants.TAG,
+                "enableEncryption success"
+            )
+        }
+
+        if (joinChannelConfig.enablePullAudioFrame) {
+            mRtcEngine?.setExternalAudioSink(true, 16000, 1)
+            CoroutineScope(Dispatchers.IO).launch {
+                mMaaSEngineConfiguration?.context?.let {
+                    PullAudioFrameManager.start(
+                        it,
+                        mRtcEngine!!,
+                        10,
+                        16000,
+                        1,
+                        true
+                    )
+                }
+            }
+        }
+
+        if (joinChannelConfig.enableSendVideoMetadata) {
+            mVideoMetadataObserver = object : IMetadataObserver {
+                override fun getMaxMetadataSize(): Int {
+                    return 1024
+                }
+
+                override fun onReadyToSendMetadata(
+                    timeStampMs: Long,
+                    sourceType: Int
+                ): ByteArray {
+                    val metadataString = "Timestamp:${System.currentTimeMillis()}"
+                    val metadata = metadataString.toByteArray(Charsets.UTF_8)
+                    Log.d(MaaSConstants.TAG, "onReadyToSendMetadata:$metadataString")
+                    return metadata
+                }
+
+                override fun onMetadataReceived(metadata: AgoraMetadata?) {
+                    Log.d(
+                        MaaSConstants.TAG,
+                        "onMetadataReceived channelId:${metadata?.channelId},uid:${metadata?.uid},data:${metadata?.data?.contentToString()},timeStampMs:${metadata?.timeStampMs}"
+                    )
+                }
+            }
+            mRtcEngine?.registerMediaMetadataObserver(
+                mVideoMetadataObserver,
+                IMetadataObserver.VIDEO_METADATA
+            )
+            Log.d(MaaSConstants.TAG, "registerMediaMetadataObserver success")
+        }
+
+        if (joinChannelConfig.enableCustomDirectAudioTracker) {
+            val audioTrackConfig = AudioTrackConfig()
+            audioTrackConfig.enableLocalPlayback = false
+            audioTrackConfig.enableAudioProcessing = false
+            mCustomAudioTrackId = mRtcEngine?.createCustomAudioTrack(
+                Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
+                audioTrackConfig
+            ) ?: 0
+            Log.d(
+                MaaSConstants.TAG,
+                "createCustomAudioTrack mCustomAudioTrackId:$mCustomAudioTrackId"
+            )
+        }
+
         return MaaSConstants.OK
     }
 
@@ -974,6 +1019,40 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
     }
 
+    override fun pushExternalAudioFrame(
+        data: ByteArray,
+        timestamp: Long,
+        sampleRate: Int,
+        channels: Int,
+        bytesPerSample: Int
+    ): Int {
+        if (mRtcEngine == null) {
+            Log.e(
+                MaaSConstants.TAG,
+                "pushExternalVideoFrameByIdInternal error: not initialized"
+            )
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+        if (mCustomAudioTrackId == -1) {
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+        val ret = mRtcEngine?.pushExternalAudioFrame(
+            data,
+            timestamp,
+            sampleRate,
+            channels,
+            Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
+            mCustomAudioTrackId
+        )
+
+        return if (ret == 0) {
+            MaaSConstants.OK
+        } else {
+            Log.e(MaaSConstants.TAG, "pushExternalAudioFrame error: $ret")
+            MaaSConstants.ERROR_GENERIC
+        }
+    }
+
     override fun close() {
         scope.cancel()
         runBlocking(Dispatchers.Default) {
@@ -988,6 +1067,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 IMetadataObserver.VIDEO_METADATA
             )
             mVideoMetadataObserver = null
+        }
+        if (mCustomAudioTrackId != -1) {
+            mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
+            mCustomAudioTrackId = -1
         }
         RtcEngine.destroy()
         if (mMaaSEngineConfiguration?.enableRtm == true) {
