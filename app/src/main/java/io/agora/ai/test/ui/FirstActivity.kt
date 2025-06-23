@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
 import io.agora.ai.test.constants.Constants
 import io.agora.ai.test.databinding.ActivityFirstBinding
+import io.agora.ai.test.maas.MaaSEngine
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import kotlin.system.exitProcess
@@ -101,6 +102,9 @@ class FirstActivity : AppCompatActivity() {
 
     private fun initView() {
         handleOnBackPressed()
+
+        val versionStr = "Rtc SDK Version: ${MaaSEngine.getSdkVersion()}"
+        binding.tvSdkVersion.text = versionStr
 
         binding.btnJoin.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))

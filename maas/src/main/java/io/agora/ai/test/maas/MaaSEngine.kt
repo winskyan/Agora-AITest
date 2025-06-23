@@ -6,6 +6,7 @@ import io.agora.ai.test.maas.internal.MaaSEngineInternal
 import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
+import io.agora.rtc2.RtcEngine
 import java.nio.ByteBuffer
 
 abstract class MaaSEngine {
@@ -109,7 +110,7 @@ abstract class MaaSEngine {
         @Synchronized
         @Keep
         fun getSdkVersion(): String {
-            return BuildConfig.VERSION_NAME
+            return RtcEngine.getSdkVersion()
         }
     }
 }
