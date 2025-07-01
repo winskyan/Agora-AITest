@@ -331,6 +331,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     enablePullAudioFrame = DemoContext.enablePullAudioFrame
                     enableSendVideoMetadata = DemoContext.enableSendVideoMetadata
                     enableCustomDirectAudioTracker = DemoContext.enableCustomDirectAudioTracker
+                    enableWriteRecordingAudioFrame = DemoContext.enableWriteRecordingAudioFrame
                 }
                 mMaaSEngine?.joinChannel(
                     channelName,

@@ -172,6 +172,12 @@ object SettingsDialog {
                         DemoContext.enableCustomDirectAudioTracker = isChecked
                     }
 
+                    binding.enableWriteRecordingAudioFrameCb.isChecked =
+                        DemoContext.enableWriteRecordingAudioFrame
+                    binding.enableWriteRecordingAudioFrameCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableWriteRecordingAudioFrame = isChecked
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 

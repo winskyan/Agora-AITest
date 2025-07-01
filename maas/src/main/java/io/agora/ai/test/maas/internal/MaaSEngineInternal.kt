@@ -37,6 +37,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
@@ -59,6 +60,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mRemoteUserId = 0
 
     private var mCustomAudioTrackId = -1
+
+    // For reading audio file from assets
+    private var mAudioFileInputStream: InputStream? = null
+    private var mAudioFileData: ByteArray? = null
+    private var mAudioFilePosition: Int = 0
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -249,6 +255,40 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         buffer.rewind()
     }
 
+    private fun writeRecordingAudioFrame(buffer: ByteBuffer?) {
+        if (buffer == null || mAudioFileData == null) return
+
+        buffer.rewind()
+        val byteArray = ByteArray(buffer.remaining())
+
+        // Read data from audio file in circular manner
+        val audioFileData = mAudioFileData!!
+        val totalSize = audioFileData.size
+        val needSize = byteArray.size
+
+        var copied = 0
+        while (copied < needSize) {
+            val remainingInFile = totalSize - mAudioFilePosition
+            val copySize = minOf(needSize - copied, remainingInFile)
+
+            // Copy data from current position
+            System.arraycopy(audioFileData, mAudioFilePosition, byteArray, copied, copySize)
+
+            copied += copySize
+            mAudioFilePosition += copySize
+
+            // If reached end of file, reset to beginning
+            if (mAudioFilePosition >= totalSize) {
+                mAudioFilePosition = 0
+                Log.d(MaaSConstants.TAG, "Audio file reached end, resetting to beginning")
+            }
+        }
+
+        buffer.clear()
+        buffer.put(byteArray)
+        buffer.rewind()
+    }
+
     private fun saveAudioFrame(buffer: ByteBuffer?) {
         if (buffer == null) return
 
@@ -274,9 +314,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     private fun registerAudioFrame(
         enableStereoTest: Boolean,
-        enableSaveAudio: Boolean
+        enableSaveAudio: Boolean,
+        enableWriteRecordingAudioFrame: Boolean
     ) {
-        if (!enableStereoTest && !enableSaveAudio) {
+        if (!enableStereoTest && !enableSaveAudio && !enableWriteRecordingAudioFrame) {
             return
         }
 
@@ -291,6 +332,15 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 2,
                 Constants.RAW_AUDIO_FRAME_OP_MODE_READ_WRITE,
                 320
+            )
+        }
+
+        if (enableWriteRecordingAudioFrame) {
+            mRtcEngine?.setRecordingAudioFrameParameters(
+                48000,
+                1,
+                Constants.RAW_AUDIO_FRAME_OP_MODE_READ_WRITE,
+                480
             )
         }
 
@@ -312,7 +362,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 renderTimeMs: Long,
                 avsync_type: Int
             ): Boolean {
-                processBuffer(buffer)
+                if (enableWriteRecordingAudioFrame) {
+                    writeRecordingAudioFrame(buffer)
+                } else if (enableStereoTest) {
+                    processBuffer(buffer)
+                }
                 return true
             }
 
@@ -463,10 +517,31 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     }
 
     private fun handleJoinChannelConfig(joinChannelConfig: JoinChannelConfig): Int {
+        // Load audio file from assets if enableWriteRecordingAudioFrame is enabled
+        if (joinChannelConfig.enableWriteRecordingAudioFrame) {
+            try {
+                val inputStream =
+                    mMaaSEngineConfiguration?.context?.assets?.open("delay_yuliao_48k_1ch.pcm")
+                mAudioFileData = inputStream?.readBytes()
+                inputStream?.close()
+                mAudioFilePosition = 0
+                Log.d(
+                    MaaSConstants.TAG,
+                    "Audio file loaded from assets for writeRecordingAudioFrame, size: ${mAudioFileData?.size}"
+                )
+            } catch (e: Exception) {
+                Log.e(MaaSConstants.TAG, "Failed to load audio file from assets: ${e.message}")
+                mAudioFileData = null
+            }
+        }
+
         registerAudioFrame(
             joinChannelConfig.enableStereoTest,
-            joinChannelConfig.enableSaveAudio
+            joinChannelConfig.enableSaveAudio,
+            joinChannelConfig.enableWriteRecordingAudioFrame
         )
+
+
 
         if (joinChannelConfig.enablePushExternalVideo) {
             mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
@@ -606,6 +681,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             mRtcEngine?.destroyCustomVideoTrack(mVideoTrackerId)
             mVideoTrackerId = 0
         }
+
+        // Clean up audio file resources when leaving channel
+        mAudioFileData = null
+        mAudioFilePosition = 0
+
         return MaaSConstants.OK
     }
 
@@ -1087,6 +1167,13 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         mRemoteUserId = 0
         mChannelId = ""
         mJoinChannelConfig = null
+
+        // Final clean up audio file resources
+        mAudioFileData = null
+        mAudioFilePosition = 0
+        mAudioFileInputStream?.close()
+        mAudioFileInputStream = null
+
         Log.d(MaaSConstants.TAG, "rtc destroy")
     }
 

@@ -104,6 +104,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, value)
 
+    var enableWriteRecordingAudioFrame: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_WRITE_RECORDING_AUDIO_FRAME, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_WRITE_RECORDING_AUDIO_FRAME, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,
