@@ -51,32 +51,22 @@ object RtmManager {
                     override fun onMessageEvent(event: MessageEvent?) {
                         super.onMessageEvent(event)
                         Log.d(MaaSConstants.TAG, "Rtm onMessageEvent: $event")
-                        if (event?.channelType == RtmConstants.RtmChannelType.MESSAGE) {
-                            var rtmMessage: String = ""
-                            if (event.message.type == RtmConstants.RtmMessageType.BINARY) {
-                                rtmMessage = String((event.message.data as ByteArray))
-                            } else if (event.message.type == RtmConstants.RtmMessageType.STRING) {
-                                rtmMessage = event.message.data as String
-                            }
+                        val channelType = when (event?.channelType) {
+                            RtmConstants.RtmChannelType.MESSAGE -> MaaSConstants.RtmChannelType.MESSAGE
+                            RtmConstants.RtmChannelType.STREAM -> MaaSConstants.RtmChannelType.STREAM
+                            else -> MaaSConstants.RtmChannelType.MESSAGE
+                        }
+
+                        var rtmMessage: String = ""
+                        if (event?.message?.type == RtmConstants.RtmMessageType.BINARY) {
+                            rtmMessage = String((event.message.data as ByteArray))
+                        } else if (event?.message?.type == RtmConstants.RtmMessageType.STRING) {
+                            rtmMessage = event.message.data as String
+                        }
+                        event?.channelName?.let {
                             mEventCallback?.onRtmMessageReceived(
-                                MaaSConstants.RtmChannelType.MESSAGE,
-                                event.channelName,
-                                event.topicName,
-                                rtmMessage,
-                                event.publisherId,
-                                event.customType,
-                                event.timestamp
-                            )
-                        } else if (event?.channelType == RtmConstants.RtmChannelType.STREAM) {
-                            var rtmMessage: String = ""
-                            if (event.message.type == RtmConstants.RtmMessageType.BINARY) {
-                                rtmMessage = String((event.message.data as ByteArray))
-                            } else if (event.message.type == RtmConstants.RtmMessageType.STRING) {
-                                rtmMessage = event.message.data as String
-                            }
-                            mEventCallback?.onRtmMessageReceived(
-                                MaaSConstants.RtmChannelType.STREAM,
-                                event.channelName,
+                                channelType,
+                                it,
                                 event.topicName,
                                 rtmMessage,
                                 event.publisherId,
@@ -84,6 +74,7 @@ object RtmManager {
                                 event.timestamp
                             )
                         }
+
                     }
 
                     override fun onPresenceEvent(event: PresenceEvent?) {
@@ -309,7 +300,11 @@ object RtmManager {
         Log.d(MaaSConstants.TAG, "rtm release")
     }
 
-    fun sendRtmMessage(message: ByteArray, channelType: MaaSConstants.RtmChannelType) {
+    fun sendRtmMessage(
+        message: ByteArray,
+        channelType: MaaSConstants.RtmChannelType,
+        userId: String
+    ) {
         if (channelType == MaaSConstants.RtmChannelType.STREAM) {
             sendStreamMessage(message)
             return
@@ -321,7 +316,12 @@ object RtmManager {
             "send rtm message channelName:$mRoomName, message: ${String(message)}, channelType: $channelType"
         )
 
-        mRtmClient?.publish(mRoomName, message, object : PublishOptions() {
+        var channelName = mRoomName
+        if (channelType == MaaSConstants.RtmChannelType.USER && userId.isNotEmpty()) {
+            channelName = userId
+        }
+
+        mRtmClient?.publish(channelName, message, object : PublishOptions() {
             init {
                 setChannelType(RtmConstants.RtmChannelType.getEnum(channelType.value))
             }

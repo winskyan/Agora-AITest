@@ -81,6 +81,11 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var mReceiveRtmStreamMessageTotalTime = 0L
     private var mReceiveRtmStreamMessageTotalCount = 0
 
+    private var mSendRtmUserMessageTime = 0L
+    private var mSendRtmUserMessage = ""
+    private var mReceiveRtmUserMessageTotalTime = 0L
+    private var mReceiveRtmUserMessageTotalCount = 0
+
     private var sendingJob: Job? = null
 
     private var mHistoryFileName = ""
@@ -568,6 +573,18 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             return
         }
         updateHistoryUI("SendRtmStreamMessage:$mSendRtmStreamMessage")
+
+        mSendRtmUserMessageTime = System.currentTimeMillis()
+        mSendRtmUserMessage = "rtmUserMessage:$mSendRtmUserMessageTime"
+        ret = mMaaSEngine?.sendRtmMessage(
+            mSendRtmUserMessage.toByteArray(Charsets.UTF_8),
+            MaaSConstants.RtmChannelType.USER, "100"
+        )
+        if (ret != 0) {
+            Log.e(TAG, "sendRtmUserMessage failed")
+            return
+        }
+        updateHistoryUI("SendRtmUserMessage:$mSendRtmUserMessage")
     }
 
     private fun handleOnBackPressed() {
@@ -622,7 +639,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
         mJoinSuccess = true
         runOnUiThread {
-            updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid)")
+            updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid:${if (DemoContext.enableRtm) KeyCenter.getRtmUid() else ""})")
             updateUI()
             handleJoinChannelSuccess()
         }

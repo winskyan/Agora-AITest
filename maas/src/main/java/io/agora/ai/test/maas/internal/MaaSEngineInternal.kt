@@ -944,10 +944,12 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     override fun sendRtmMessage(
         message: ByteArray,
-        channelType: MaaSConstants.RtmChannelType
+        channelType: MaaSConstants.RtmChannelType,
+        userId: String
+
     ): Int {
         if (mMaaSEngineConfiguration?.enableRtm == true) {
-            RtmManager.sendRtmMessage(message, channelType)
+            RtmManager.sendRtmMessage(message, channelType, userId)
         } else {
             Log.e(MaaSConstants.TAG, "sendRtmMessage error: not enabled")
             return MaaSConstants.ERROR_NOT_INITIALIZED

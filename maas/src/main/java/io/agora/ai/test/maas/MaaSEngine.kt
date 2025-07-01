@@ -66,7 +66,12 @@ abstract class MaaSEngine {
 
     abstract fun sendAudioMetadata(metadata: ByteArray): Int
 
-    abstract fun sendRtmMessage(message: ByteArray, channelType: MaaSConstants.RtmChannelType): Int
+    abstract fun sendRtmMessage(
+        message: ByteArray,
+        channelType: MaaSConstants.RtmChannelType,
+        userId: String = ""
+    ): Int
+
     abstract fun pushVideoFrame(
         data: ByteArray,
         width: Int,
