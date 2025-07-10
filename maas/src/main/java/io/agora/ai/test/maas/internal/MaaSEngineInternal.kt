@@ -637,6 +637,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         if (joinChannelConfig.enableCustomDirectAudioTracker) {
             val audioTrackConfig = AudioTrackConfig()
             audioTrackConfig.enableLocalPlayback = false
+            //4.5.1
             audioTrackConfig.enableAudioProcessing = false
             mCustomAudioTrackId = mRtcEngine?.createCustomAudioTrack(
                 Constants.AudioTrackType.AUDIO_TRACK_DIRECT,

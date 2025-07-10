@@ -256,6 +256,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         handleOnBackPressed()
         updateUI()
 
+        val versionStr = "Rtc SDK Version: ${MaaSEngine.getSdkVersion()}"
+        binding.tvSdkVersion.text = versionStr
+
         binding.toolbarSetting.setOnClickListener {
             SettingsDialog.showSettingsDialog(this)
         }
@@ -289,6 +292,11 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     "history-${channelName}-${KeyCenter.getRtcUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
                 initWriter()
                 initEngine()
+
+                mMaaSEngine?.enableAudio()
+                DemoContext.enableAudio = true
+                mMaaSEngine?.stopVideo()
+                DemoContext.enableVideo = false
 
                 val config = MassEncryptionConfig()
 
