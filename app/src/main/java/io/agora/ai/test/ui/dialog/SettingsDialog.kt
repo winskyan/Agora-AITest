@@ -183,6 +183,13 @@ object SettingsDialog {
                         DemoContext.enableDelayPlayback = isChecked
                     }
 
+                    binding.delayFrameCountEt.setText(DemoContext.delayFrameCount.toString())
+                    binding.delayFrameCountEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.delayFrameCount = binding.delayFrameCountEt.text.toString().toIntOrNull() ?: 100
+                        }
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 

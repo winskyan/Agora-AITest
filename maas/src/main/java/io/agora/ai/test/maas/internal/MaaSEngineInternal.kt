@@ -66,14 +66,14 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mAudioFileData: ByteArray? = null
     private var mAudioFilePosition: Int = 0
 
-    private val delayFrameCount = 100
-    private val bufferSize = 160 * 2
-    private val ringBuffer: Array<ByteArray> = Array(delayFrameCount) { ByteArray(bufferSize) }
+    private var delayFrameCount = 100
+    private var bufferSize = 160 * 2
+    private var ringBuffer: Array<ByteArray>? = null
     private var writeIndex = 0
     private var readIndex = 0
     private var filledCount = 0
-    private val silence = ByteArray(bufferSize)
-    private val currentAudioByteArray = ByteArray(bufferSize)
+    private var silence: ByteArray? = null
+    private var currentAudioByteArray: ByteArray? = null
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -313,21 +313,33 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
     private fun delayPlayback(buffer: ByteBuffer?) {
         if (buffer == null) return
+        if (currentAudioByteArray == null) {
+            currentAudioByteArray = ByteArray(buffer.remaining())
+        }
+        if (silence == null) {
+            silence = ByteArray(buffer.remaining())
+        }
 
-        buffer.get(currentAudioByteArray, 0, currentAudioByteArray.size)
+        currentAudioByteArray?.let { buffer.get(it, 0, it.size) }
         buffer.clear()
 
         if (filledCount < delayFrameCount) {
-            buffer.put(silence)
+            buffer.put(silence!!)
             filledCount++
         } else {
-            val readBuf = ringBuffer[readIndex]
-            buffer.put(readBuf)
+            val readBuf = ringBuffer?.get(readIndex)
+            if (readBuf != null) {
+                buffer.put(readBuf)
+            }
             readIndex = (readIndex + 1) % delayFrameCount
         }
 
-        val writeBuf = ringBuffer[writeIndex]
-        System.arraycopy(currentAudioByteArray, 0, writeBuf, 0, currentAudioByteArray.size)
+        val writeBuf = ringBuffer?.get(writeIndex)
+        currentAudioByteArray?.let {
+            if (writeBuf != null) {
+                System.arraycopy(it, 0, writeBuf, 0, it.size)
+            }
+        }
 
         writeIndex = (writeIndex + 1) % delayFrameCount
 
@@ -348,7 +360,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         enableStereoTest: Boolean,
         enableSaveAudio: Boolean,
         enableWriteRecordingAudioFrame: Boolean,
-        enableDelayPlayback: Boolean
+        enableDelayPlayback: Boolean,
+        delayFrameCount: Int
     ) {
         if (!enableStereoTest && !enableSaveAudio && !enableWriteRecordingAudioFrame && !enableDelayPlayback) {
             Log.d(MaaSConstants.TAG, "registerAudioFrame: no audio frame observer enabled")
@@ -390,6 +403,11 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 16000,
                 1, Constants.RAW_AUDIO_FRAME_OP_MODE_READ_WRITE, 160
             )
+            this.delayFrameCount = delayFrameCount
+            this.bufferSize = 160 * 2 // 160 samples * 2 bytes per sample (16-bit)
+            ringBuffer = Array(delayFrameCount) { ByteArray(bufferSize) }
+            silence = ByteArray(bufferSize)
+            currentAudioByteArray = ByteArray(bufferSize)
         }
         mRtcEngine?.registerAudioFrameObserver(object : IAudioFrameObserver {
             override fun onRecordAudioFrame(
@@ -584,7 +602,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             joinChannelConfig.enableStereoTest,
             joinChannelConfig.enableSaveAudio,
             joinChannelConfig.enableWriteRecordingAudioFrame,
-            joinChannelConfig.enableDelayPlayback
+            joinChannelConfig.enableDelayPlayback, joinChannelConfig.delayFrameCount
         )
 
 

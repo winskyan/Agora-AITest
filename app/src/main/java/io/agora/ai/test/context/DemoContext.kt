@@ -121,6 +121,10 @@ object DemoContext {
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_DELAY_PLAYBACK, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_DELAY_PLAYBACK, value)
 
+    var delayFrameCount: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_DELAY_FRAME_COUNT, 100)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_DELAY_FRAME_COUNT, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,
