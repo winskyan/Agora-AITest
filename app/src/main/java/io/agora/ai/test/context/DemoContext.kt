@@ -98,15 +98,28 @@ object DemoContext {
 
     var enableLeaveChannelWithoutDestroy: Boolean
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY, false)
-        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY, value)
+        set(value) = MMKVUtils.putBoolean(
+            Constants.MMKV_KEY_ENABLE_LEAVE_CHANNEL_WITHOUT_DESTROY,
+            value
+        )
 
     var enableCustomDirectAudioTracker: Boolean
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, false)
-        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER, value)
+        set(value) = MMKVUtils.putBoolean(
+            Constants.MMKV_KEY_ENABLE_CUSTOM_DIRECT_AUDIO_TRACKER,
+            value
+        )
 
     var enableWriteRecordingAudioFrame: Boolean
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_WRITE_RECORDING_AUDIO_FRAME, false)
-        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_WRITE_RECORDING_AUDIO_FRAME, value)
+        set(value) = MMKVUtils.putBoolean(
+            Constants.MMKV_KEY_ENABLE_WRITE_RECORDING_AUDIO_FRAME,
+            value
+        )
+
+    var enableDelayPlayback: Boolean
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_DELAY_PLAYBACK, false)
+        set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_DELAY_PLAYBACK, value)
 
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(

@@ -178,6 +178,11 @@ object SettingsDialog {
                         DemoContext.enableWriteRecordingAudioFrame = isChecked
                     }
 
+                    binding.enableDelayPlaybackCb.isChecked = DemoContext.enableDelayPlayback
+                    binding.enableDelayPlaybackCb.setOnCheckedChangeListener { _, isChecked ->
+                        DemoContext.enableDelayPlayback = isChecked
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 

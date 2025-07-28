@@ -249,6 +249,15 @@
                     android:textSize="15sp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/enable_custom_direct_audio_tracker_cb" />
+
+                <CheckBox
+                    android:id="@+id/enable_delay_playback_cb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/enable_delay_playback"
+                    android:textSize="15sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/enable_write_recording_audio_frame_cb" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView

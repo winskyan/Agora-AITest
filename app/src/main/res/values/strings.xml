@@ -33,6 +33,7 @@
     <string name="enable_leave_channel_without_destroy">Enable Leave Channel Without Destroy</string>
     <string name="enable_custom_direct_audio_tracker">Enable Custom Direct Audio Tracker</string>
     <string name="enable_write_recording_audio_frame">Enable Write Recording Audio Frame</string>
+    <string name="enable_delay_playback">Enable Delay Playback</string>
     <string name="client_role_type">Role</string>
     <string name="client_role_type_broadcaster">Broadcaster</string>
     <string name="client_role_type_audience">Audience</string>
