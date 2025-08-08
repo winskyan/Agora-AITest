@@ -6,6 +6,8 @@ import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.VideoEncoderConfiguration
 
 object Utils {
+    private val HEX_ARRAY: CharArray = "0123456789ABCDEF".toCharArray()
+
     fun getRtcFrameRate(frameRate: Int): VideoEncoderConfiguration.FRAME_RATE {
         return when (frameRate) {
             1 -> VideoEncoderConfiguration.FRAME_RATE.FRAME_RATE_FPS_1
@@ -68,5 +70,18 @@ object Utils {
             8 -> EncryptionConfig.EncryptionMode.AES_256_GCM2
             else -> EncryptionConfig.EncryptionMode.MODE_END
         }
+    }
+
+    fun bytesToHex(bytes: ByteArray?): String {
+        if (bytes == null) {
+            return "null"
+        }
+        val hexChars = CharArray(bytes.size * 2)
+        for (i in bytes.indices) {
+            val v = bytes[i].toInt() and 0xFF
+            hexChars[i * 2] = HEX_ARRAY[v ushr 4]
+            hexChars[i * 2 + 1] = HEX_ARRAY[v and 0x0F]
+        }
+        return kotlin.text.String(hexChars)
     }
 }
