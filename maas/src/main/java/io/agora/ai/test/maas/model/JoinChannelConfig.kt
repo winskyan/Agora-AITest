@@ -12,10 +12,12 @@ class JoinChannelConfig {
     var enableWriteRecordingAudioFrame: Boolean = false
     var enableDelayPlayback: Boolean = false
     var delayFrameCount: Int = 100
+    var enableJoinChannelEx = false
 
     override fun toString(): String {
         return "JoinChannelConfig(enableStereoTest=$enableStereoTest, enableSaveAudio=$enableSaveAudio, enablePushExternalVideo=$enablePushExternalVideo, " +
                 "enableEncryption=$enableEncryption, encryptionConfig=$encryptionConfig, enablePullAudioFrame=$enablePullAudioFrame , " +
-                "enableSendVideoMetadata=$enableSendVideoMetadata , enableCustomDirectAudioTracker=$enableCustomDirectAudioTracker,enableWriteRecordingAudioFrame=$enableWriteRecordingAudioFrame,enableDelayPlayback=$enableDelayPlayback,delayFrameCount=$delayFrameCount)"
+                "enableSendVideoMetadata=$enableSendVideoMetadata , enableCustomDirectAudioTracker=$enableCustomDirectAudioTracker,enableWriteRecordingAudioFrame=$enableWriteRecordingAudioFrame,enableDelayPlayback=$enableDelayPlayback,delayFrameCount=$delayFrameCount," +
+                " enableJoinChannelEx=$enableJoinChannelEx)"
     }
 }

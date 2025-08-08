@@ -552,6 +552,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private fun sendRtcAudioMetadata() {
         val currentTime = System.currentTimeMillis()
         mSendRtcAudioMetadata = "RtcAudioMetadata:$currentTime"
+        val testByteArrayData = byteArrayOf(
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+            0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+        )
         val ret = mMaaSEngine?.sendAudioMetadata(mSendRtcAudioMetadata.toByteArray(Charsets.UTF_8))
         if (ret != 0) {
             Log.e(TAG, "sendAudioMetadata ret:$ret")
@@ -686,7 +690,15 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     }
 
     override fun onStreamMessage(uid: Int, data: ByteArray?) {
-        Log.d(TAG, "onStreamMessage uid:$uid data:${String(data!!, Charsets.UTF_8)}")
+        Log.d(
+            TAG,
+            "onStreamMessage uid:$uid data:${
+                String(
+                    data!!,
+                    Charsets.UTF_8
+                )
+            } byteArray:${io.agora.ai.test.maas.internal.utils.Utils.bytesToHex(data)}"
+        )
         if (0L != mSendRtcDataStreamMessageTime && data.contentEquals(
                 mSendRtcDataStreamMessage.toByteArray(Charsets.UTF_8)
             )
@@ -704,7 +716,12 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     override fun onAudioMetadataReceived(uid: Int, metadata: ByteArray?) {
         Log.d(
             TAG,
-            "onAudioMetadataReceived uid:$uid metadata:${String(metadata!!, Charsets.UTF_8)}"
+            "onAudioMetadataReceived uid:$uid string metadata:${
+                String(
+                    metadata!!,
+                    Charsets.UTF_8
+                )
+            } byteArray metadata:${io.agora.ai.test.maas.internal.utils.Utils.bytesToHex(metadata)}"
         )
         if (0L != mSendRtcAudioMetadataTime && metadata.contentEquals(
                 mSendRtcAudioMetadata.toByteArray(

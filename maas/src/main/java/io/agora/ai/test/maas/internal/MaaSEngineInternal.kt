@@ -18,9 +18,11 @@ import io.agora.rtc2.DataStreamConfig
 import io.agora.rtc2.IAudioFrameObserver
 import io.agora.rtc2.IMetadataObserver
 import io.agora.rtc2.IRtcEngineEventHandler
+import io.agora.rtc2.RtcConnection
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineConfig.LogConfig
+import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.audio.AdvancedAudioOptions
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
@@ -34,7 +36,6 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -74,6 +75,89 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var filledCount = 0
     private var silence: ByteArray? = null
     private var currentAudioByteArray: ByteArray? = null
+    private var rtcConnection: RtcConnection? = null
+
+    private var rtcEventHandler = object : IRtcEngineEventHandler() {
+        override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
+            Log.d(
+                MaaSConstants.TAG,
+                "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
+            )
+            mLocalUserId = uid
+            if (-1 == mDataStreamId) {
+                val cfg = DataStreamConfig()
+                cfg.syncWithAudio = false
+                cfg.ordered = true
+                mDataStreamId = mRtcEngine?.createDataStream(cfg) ?: -1
+            }
+            if (rtcConnection != null) {
+                rtcConnection = RtcConnection(channel, uid)
+            }
+            mEventCallback?.onJoinChannelSuccess(channel, uid, elapsed)
+        }
+
+        override fun onLeaveChannel(stats: RtcStats) {
+            Log.d(MaaSConstants.TAG, "onLeaveChannel")
+            mEventCallback?.onLeaveChannelSuccess()
+        }
+
+        override fun onUserJoined(uid: Int, elapsed: Int) {
+            Log.d(MaaSConstants.TAG, "onUserJoined uid:$uid elapsed:$elapsed")
+            mRemoteUserId = uid
+            mEventCallback?.onUserJoined(uid, elapsed)
+        }
+
+        override fun onUserOffline(uid: Int, reason: Int) {
+            Log.d(MaaSConstants.TAG, "onUserOffline uid:$uid reason:$reason")
+            mEventCallback?.onUserOffline(uid, reason)
+        }
+
+        override fun onAudioVolumeIndication(
+            speakers: Array<out AudioVolumeInfo>?,
+            totalVolume: Int
+        ) {
+//                    Log.d(
+//                        MaasConstants.TAG,
+//                        "onAudioVolumeIndication totalVolume:$totalVolume"
+//                    )
+            val allSpeakers = ArrayList<io.agora.ai.test.maas.model.AudioVolumeInfo>()
+            speakers?.forEach {
+                allSpeakers.add(
+                    io.agora.ai.test.maas.model.AudioVolumeInfo(
+                        it.uid,
+                        it.volume
+                    )
+                )
+            }
+            mEventCallback?.onAudioVolumeIndication(allSpeakers, totalVolume)
+        }
+
+        override fun onStreamMessage(uid: Int, streamId: Int, data: ByteArray?) {
+            super.onStreamMessage(uid, streamId, data)
+            Log.d(
+                MaaSConstants.TAG,
+                "onStreamMessage uid:$uid streamId:$streamId byte array data:${
+                    Utils.bytesToHex(
+                        data
+                    )
+                } string data:${String(data!!)}"
+            )
+            mEventCallback?.onStreamMessage(uid, data)
+        }
+
+        override fun onAudioMetadataReceived(uid: Int, data: ByteArray?) {
+            super.onAudioMetadataReceived(uid, data)
+            Log.d(
+                MaaSConstants.TAG,
+                "onAudioMetadataReceived uid:$uid data:${
+                    Utils.bytesToHex(
+                        data
+                    )
+                } string data:${String(data!!)}"
+            )
+            mEventCallback?.onAudioMetadataReceived(uid, data)
+        }
+    }
 
     override fun initialize(configuration: MaaSEngineConfiguration): Int {
         Log.d(MaaSConstants.TAG, "initialize configuration:$configuration")
@@ -98,76 +182,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             rtcEngineConfig.mAppId = configuration.appId
             rtcEngineConfig.mChannelProfile =
                 Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
-            rtcEngineConfig.mEventHandler = object : IRtcEngineEventHandler() {
-                override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
-                    Log.d(
-                        MaaSConstants.TAG,
-                        "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
-                    )
-                    mLocalUserId = uid
-                    if (-1 == mDataStreamId) {
-                        val cfg = DataStreamConfig()
-                        cfg.syncWithAudio = false
-                        cfg.ordered = true
-                        mDataStreamId = mRtcEngine?.createDataStream(cfg) ?: -1
-                    }
-                    mEventCallback?.onJoinChannelSuccess(channel, uid, elapsed)
-                }
-
-                override fun onLeaveChannel(stats: RtcStats) {
-                    Log.d(MaaSConstants.TAG, "onLeaveChannel")
-                    mEventCallback?.onLeaveChannelSuccess()
-                }
-
-                override fun onUserJoined(uid: Int, elapsed: Int) {
-                    Log.d(MaaSConstants.TAG, "onUserJoined uid:$uid elapsed:$elapsed")
-                    mRemoteUserId = uid
-                    mEventCallback?.onUserJoined(uid, elapsed)
-                }
-
-                override fun onUserOffline(uid: Int, reason: Int) {
-                    Log.d(MaaSConstants.TAG, "onUserOffline uid:$uid reason:$reason")
-                    mEventCallback?.onUserOffline(uid, reason)
-                }
-
-                override fun onAudioVolumeIndication(
-                    speakers: Array<out AudioVolumeInfo>?,
-                    totalVolume: Int
-                ) {
-//                    Log.d(
-//                        MaasConstants.TAG,
-//                        "onAudioVolumeIndication totalVolume:$totalVolume"
-//                    )
-                    val allSpeakers = ArrayList<io.agora.ai.test.maas.model.AudioVolumeInfo>()
-                    speakers?.forEach {
-                        allSpeakers.add(
-                            io.agora.ai.test.maas.model.AudioVolumeInfo(
-                                it.uid,
-                                it.volume
-                            )
-                        )
-                    }
-                    mEventCallback?.onAudioVolumeIndication(allSpeakers, totalVolume)
-                }
-
-                override fun onStreamMessage(uid: Int, streamId: Int, data: ByteArray?) {
-                    super.onStreamMessage(uid, streamId, data)
-                    Log.d(
-                        MaaSConstants.TAG,
-                        "onStreamMessage uid:$uid streamId:$streamId data:${data?.toString()}"
-                    )
-                    mEventCallback?.onStreamMessage(uid, data)
-                }
-
-                override fun onAudioMetadataReceived(uid: Int, data: ByteArray?) {
-                    super.onAudioMetadataReceived(uid, data)
-                    Log.d(
-                        MaaSConstants.TAG,
-                        "onAudioMetadataReceived uid:$uid data:${data?.toString()}"
-                    )
-                    mEventCallback?.onAudioMetadataReceived(uid, data)
-                }
-            }
+            rtcEngineConfig.mEventHandler = rtcEventHandler
 
             val logConfig = LogConfig()
             logConfig.level = Constants.LOG_LEVEL_INFO
@@ -182,35 +197,37 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             mRtcEngine?.setAudioProfile(configuration.audioProfile)
             mRtcEngine?.setAudioScenario(configuration.audioScenario)
 
-            //mRtcEngine?.setParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"120000000\",\"uuid\":\"123456789\",\"duration\":\"1200000\"}}")
-
-            mRtcEngine?.setParameters("{\"rtc.enable_debug_log\":true}")
+            setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
 
             for (params in configuration.params) {
-                mRtcEngine?.setParameters(params)
-                Log.d(MaaSConstants.TAG, "setParameters:$params")
+                setAgoraRtcParameters(params)
             }
 
-//            mRtcEngine?.setParameters("{\"che.audio.aec.split_srate_for_48k\":16000}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.enabled\":true}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.stftType\":6}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.ainlpLowLatencyFlag\":1}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.ainsLowLatencyFlag \":1}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.procChainMode\":1}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.nlpDynamicMode\":1}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.nlpAlgRoute\":0}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.ainlpModelPref\":10}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.nsngAlgRoute\":12}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.ainsModelPref\":10}")
-//            mRtcEngine?.setParameters("{\"che.audio.sf.nsngPredefAgg\":11}")
-//            mRtcEngine?.setParameters("{\"che.audio.agc.enable\":false}")
+//            setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
+//            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":0}")
+//            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":0}")
+//            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
-//            mRtcEngine?.setParameters("{\"che.audio.aec.enable\":false}")
-//            mRtcEngine?.setParameters("{\"che.audio.ans.enable\":false}")
-//            mRtcEngine?.setParameters("{\"che.audio.agc.enable\":false}")
-//            mRtcEngine?.setParameters("{\"che.audio.custom_payload_type\":78}")
-//            mRtcEngine?.setParameters("{\"che.audio.custom_bitrate\":128000}")
-//            mRtcEngine?.setParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+//            setAgoraRtcParameters("{\"che.audio.aec.split_srate_for_48k\":16000}")
+//            setAgoraRtcParameters("{\"che.audio.sf.enabled\":true}")
+//            setAgoraRtcParameters("{\"che.audio.sf.stftType\":6}")
+//            setAgoraRtcParameters("{\"che.audio.sf.ainlpLowLatencyFlag\":1}")
+//            setAgoraRtcParameters("{\"che.audio.sf.ainsLowLatencyFlag \":1}")
+//            setAgoraRtcParameters("{\"che.audio.sf.procChainMode\":1}")
+//            setAgoraRtcParameters("{\"che.audio.sf.nlpDynamicMode\":1}")
+//            setAgoraRtcParameters("{\"che.audio.sf.nlpAlgRoute\":0}")
+//            setAgoraRtcParameters("{\"che.audio.sf.ainlpModelPref\":10}")
+//            setAgoraRtcParameters("{\"che.audio.sf.nsngAlgRoute\":12}")
+//            setAgoraRtcParameters("{\"che.audio.sf.ainsModelPref\":10}")
+//            setAgoraRtcParameters("{\"che.audio.sf.nsngPredefAgg\":11}")
+//            setAgoraRtcParameters("{\"che.audio.agc.enable\":false}")
+
+//            setAgoraRtcParameters("{\"che.audio.aec.enable\":false}")
+//            setAgoraRtcParameters("{\"che.audio.ans.enable\":false}")
+//            setAgoraRtcParameters("{\"che.audio.agc.enable\":false}")
+//            setAgoraRtcParameters("{\"che.audio.custom_payload_type\":78}")
+//            setAgoraRtcParameters("{\"che.audio.custom_bitrate\":128000}")
+//            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.adjustRecordingSignalVolume(128)
 
@@ -238,6 +255,19 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
         return MaaSConstants.OK
     }
+
+    private fun setAgoraRtcParameters(parameters: String) {
+        Log.d(MaaSConstants.TAG, "setAgoraRtcParameters parameters:$parameters")
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "setAgoraRtcParameters error: not initialized")
+            return
+        }
+        val ret = mRtcEngine?.setParameters(parameters) ?: -1
+        if (ret != 0) {
+            Log.e(MaaSConstants.TAG, "setAgoraRtcParameters parameters:${parameters} error: $ret")
+        }
+    }
+
 
     fun processBuffer(buffer: ByteBuffer?) {
         if (buffer == null) return
@@ -346,15 +376,13 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         buffer.rewind()
     }
 
-    private suspend fun saveFile(fileName: String, byteArray: ByteArray) {
+    private fun saveFile(fileName: String, byteArray: ByteArray) {
         val file = File(fileName)
-        withContext(Dispatchers.IO) {
-            FileOutputStream(file, true).use { outputStream ->
-                outputStream.write(byteArray)
-            }
+        FileOutputStream(file, true).use { outputStream ->
+            outputStream.write(byteArray)
+
         }
     }
-
 
     private fun registerAudioFrame(
         enableStereoTest: Boolean,
@@ -394,7 +422,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         if (enableSaveAudio) {
             mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
                 16000,
-                2
+                1
             )
         }
 
@@ -540,29 +568,45 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                     channelId + "_" + it + "_" + System.currentTimeMillis() + ".pcm"
                 val rtcToken =
                     if (mMaaSEngineConfiguration?.rtcToken?.isEmpty() == true) mMaaSEngineConfiguration?.appId else mMaaSEngineConfiguration?.rtcToken
-                mRtcEngine?.joinChannel(
-                    rtcToken,
-                    channelId,
-                    it,
-                    object : ChannelMediaOptions() {
-                        init {
-                            autoSubscribeAudio = true
-                            autoSubscribeVideo = true
-                            publishCustomVideoTrack = joinChannelConfig.enablePushExternalVideo
-                            customVideoTrackId = mVideoTrackerId
-                            clientRoleType = roleType
-                            publishCustomAudioTrack =
-                                joinChannelConfig.enableCustomDirectAudioTracker
-                            publishCustomAudioTrackId = mCustomAudioTrackId
-                            publishMicrophoneTrack =
-                                !joinChannelConfig.enableCustomDirectAudioTracker
-                        }
-                    })
-            } ?: MaaSConstants.ERROR_INVALID_PARAMS
+                val channelMediaOption = object : ChannelMediaOptions() {
+                    init {
+                        autoSubscribeAudio = true
+                        autoSubscribeVideo = false
+                        publishCustomVideoTrack = joinChannelConfig.enablePushExternalVideo
+                        customVideoTrackId = mVideoTrackerId
+                        clientRoleType = roleType
+                        publishCustomAudioTrack =
+                            joinChannelConfig.enableCustomDirectAudioTracker
+                        publishCustomAudioTrackId = mCustomAudioTrackId
+                        publishMicrophoneTrack =
+                            !joinChannelConfig.enableCustomDirectAudioTracker
+                        enableAudioRecordingOrPlayout =
+                            joinChannelConfig.enableCustomDirectAudioTracker
+                    }
+                }
+                if (joinChannelConfig.enableJoinChannelEx) {
+                    rtcConnection = RtcConnection(channelId, it)
+                    (mRtcEngine as RtcEngineEx).joinChannelEx(
+                        rtcToken,
+                        rtcConnection,
+                        channelMediaOption,
+                        rtcEventHandler
+                    )
+                } else {
+                    rtcConnection = null
+                    mRtcEngine?.joinChannel(
+                        rtcToken,
+                        channelId,
+                        it,
+                        channelMediaOption
+                    )
+                } ?: MaaSConstants.ERROR_INVALID_PARAMS
+
+            }
 
             val joinParams =
                 "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": true}}"
-            mRtcEngine?.setParameters(joinParams)
+            setAgoraRtcParameters(joinParams)
             Log.d(
                 MaaSConstants.TAG, "joinChannel ret:$ret"
             )
@@ -726,7 +770,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         try {
             val leaveParams =
                 "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": false}}"
-            mRtcEngine?.setParameters(leaveParams)
+            setAgoraRtcParameters(leaveParams)
             Log.d(MaaSConstants.TAG, "setParameters $leaveParams")
             Thread.sleep(300)
 
@@ -1079,7 +1123,12 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             Log.e(MaaSConstants.TAG, "sendAudioMetadata error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
-        val ret = mRtcEngine?.sendAudioMetadata(metadata)
+
+        val ret = if (rtcConnection != null) {
+            (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(metadata, rtcConnection)
+        } else {
+            mRtcEngine?.sendAudioMetadata(metadata) ?: -1
+        }
         return if (ret == 0) {
             MaaSConstants.OK
         } else {
@@ -1113,7 +1162,6 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             Log.e(MaaSConstants.TAG, "pushVideoFrame error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
-        var videoFrame: VideoFrame? = null
         when (type) {
             MaaSConstants.ViewFrameType.I420 -> {
                 val i420Buffer = JavaI420Buffer.allocate(width, height)
@@ -1133,7 +1181,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 /*
                  * Create a video frame to push.
                  */
-                videoFrame = VideoFrame(i420Buffer, 0, currentMonotonicTimeInMs * 1000000)
+                val videoFrame = VideoFrame(i420Buffer, 0, currentMonotonicTimeInMs * 1000000)
 
                 val ret = pushExternalVideoFrameByIdInternal(videoFrame, mVideoTrackerId)
                 i420Buffer.release()
