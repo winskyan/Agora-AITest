@@ -25,6 +25,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Agora-AITest"
+rootProject.name = "Agora-AIBurstTest"
 include(":app")
-include(":maas")

@@ -5,7 +5,6 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.tencent.mmkv.MMKV
 import kotlin.system.exitProcess
 
 class MyApp : Application() {
@@ -21,7 +20,6 @@ class MyApp : Application() {
         } else {
             Log.d("AgoraAITest", "当前进程不是主进程，进程名: $processName")
         }
-        MMKV.initialize(this)
     }
 
     private fun setupExceptionHandler() {

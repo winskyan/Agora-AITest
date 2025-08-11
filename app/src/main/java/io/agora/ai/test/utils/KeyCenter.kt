@@ -1,7 +1,6 @@
 package io.agora.ai.test.utils
 
-import io.agora.ai.test.BuildConfig
-import io.agora.ai.test.context.DemoContext
+import io.agora.ai.burst_test.BuildConfig
 import io.agora.media.RtcTokenBuilder
 import io.agora.rtm.RtmTokenBuilder
 import io.agora.rtm.RtmTokenBuilder2
@@ -39,15 +38,12 @@ object KeyCenter {
         if (BuildConfig.RTC_TOKEN.isNotEmpty()) {
             return BuildConfig.RTC_TOKEN
         }
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
-
-        if (appCertificate.isEmpty()) {
+        if (APP_CERTIFICATE.isEmpty()) {
             return ""
         }
         return RtcTokenBuilder().buildTokenWithUid(
-            appId,
-            appCertificate,
+            APP_ID,
+            APP_CERTIFICATE,
             channelId,
             uid,
             RtcTokenBuilder.Role.Role_Publisher,
@@ -56,16 +52,13 @@ object KeyCenter {
     }
 
     fun getRtmToken(uid: Int): String? {
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
-
-        if (appCertificate.isEmpty()) {
+        if (APP_CERTIFICATE.isEmpty()) {
             return ""
         }
         return try {
             RtmTokenBuilder().buildToken(
-                appId,
-                appCertificate, uid.toString(),
+                APP_ID,
+                APP_CERTIFICATE, uid.toString(),
                 RtmTokenBuilder.Role.Rtm_User,
                 0
             )
@@ -76,15 +69,13 @@ object KeyCenter {
     }
 
     fun getRtmToken2(uid: Int): String {
-        val appId = DemoContext.appId.ifEmpty { APP_ID }
-        val appCertificate = DemoContext.appCertificate.ifEmpty { BuildConfig.APP_CERTIFICATE }
-        if (appCertificate.isEmpty()) {
+        if (APP_CERTIFICATE.isEmpty()) {
             return ""
         }
         return try {
             RtmTokenBuilder2().buildToken(
-                appId,
-                appCertificate, uid.toString(),
+                APP_ID,
+                APP_CERTIFICATE, uid.toString(),
                 24 * 60 * 60
             )
         } catch (e: Exception) {

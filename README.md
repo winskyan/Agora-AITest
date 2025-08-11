@@ -15,236 +15,64 @@ APP_CERTIFICATE=你的证书密钥
 
 在 Android Studio 中打开项目，选择 `app` 模块并运行。
 
-## MaaSEngine 使用指南
+## 业务流程
 
-`MaaSEngine` 是一个抽象类，提供了视频、音频和消息处理的接口。本文将介绍如何使用该类及其方法。
+- **启动与权限（`MainActivity`）**
+  - 启动后调用 `checkPermissions()` 申请权限：`RECORD_AUDIO`、`CAMERA`、`WRITE_EXTERNAL_STORAGE`。
+  - 初始化界面并展示 SDK 版本：`RtcEngine.getSdkVersion()`。
 
-### 初始化 MaaSEngine
+- **点击加入/离开频道（`MainActivity`）**
+  - 未加入时点击“Join”：
+    - 读取频道名输入，默认为 `testAga`。
+    - 调用 `RtcManager.initialize(applicationContext, KeyCenter.APP_ID, this)` 初始化 SDK，并注册回调到 `MainActivity`（实现 `IRtcEventCallback`）。
+    - 通过 `KeyCenter.getRtcUid()` 生成本地 UID，`KeyCenter.getRtcToken(channel, uid)` 生成或返回配置的 RTC Token。
+    - 调用 `RtcManager.joinChannelEx(channel, uid, token, Constants.CLIENT_ROLE_BROADCASTER)` 入频道，角色为主播。
+  - 已加入时点击“Leave”：
+    - 停止音频读取线程 `mAudioFileReader?.stop()` 并调用 `RtcManager.leaveChannel()` 离开频道。
 
-在使用 `MaaSEngine` 之前，需要先创建并初始化一个 `MaaSEngine` 实例：
+- **加入成功回调与后续处理（`MainActivity`）**
+  - `onJoinChannelSuccess`：
+    - 更新标题与按钮状态。
+    - 启动音频推送逻辑 `handleJoinChannelSuccess()`：
+      - 先从 assets 读取一次性 PCM 并推送：`tts_out_48k_1ch.pcm`（48k/单声道/16bit）。
+      - 创建并启动 `AudioFileReader`，以固定间隔循环读取 `nearin_power_48k_1ch.pcm`，在 `onAudioRead` 回调中持续调用 `RtcManager.pushExternalAudioFrame(...)` 推送自定义音频帧。
 
-```kotlin
-val maasEngine = MaaSEngine.create()
-val configuration = MaaSEngineConfiguration(/* 配置参数 */)
-val result = maasEngine?.initialize(configuration)
-if (result == 0) {
-    // 初始化成功
-} else {
-    // 初始化失败
-}
-```
+- **RTC 初始化与参数设置（`RtcManager`）**
+  - `initialize(...)`：
+    - 创建 `RtcEngine`，设置频道场景为直播：`CHANNEL_PROFILE_LIVE_BROADCASTING`。
+    - 设置音频 Profile 与场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`。
+    - 常用内部参数：
+      - `{"rtc.enable_debug_log":true}` 开启调试日志。
+      - `{"che.audio.get_burst_mode":true}` 启用burst模式。
+      - `{"che.audio.neteq.max_wait_first_decode_ms":0}`/`{"che.audio.neteq.max_wait_ms":0}` 。
+    - 设为外放：`setDefaultAudioRoutetoSpeakerphone(true)`。
+  - `joinChannelEx(...)`：
+    - 注册音频帧观察者 `registerAudioFrame()`（拉流前混音回调）。
+    - 创建自定义音轨 `createCustomAudioTrack(AUDIO_TRACK_DIRECT)` 并记录 `mCustomAudioTrackId`。
+    - 配置 `ChannelMediaOptions`：
+      - `autoSubscribeAudio = true`、`autoSubscribeVideo = false`。
+      - `clientRoleType = roleType`（入参）。
+      - `publishCustomAudioTrack = true`、`publishCustomAudioTrackId = mCustomAudioTrackId`。
+      - `publishMicrophoneTrack = false`（不使用麦克风，改为自定义音轨）。
+      - `enableAudioRecordingOrPlayout = false`（关闭本地播放/录制）。
+    - 通过 `RtcEngineEx.joinChannelEx(...)` 入频道。
 
-### 加入和离开频道
+- **自定义音频推送（`RtcManager.pushExternalAudioFrame`）**
+  - 前置条件：已 `initialize` 且已创建自定义音轨（`mCustomAudioTrackId != -1`）。
+  - 入参需与源文件匹配：采样率（如 48000）、声道（如 1）、采样字节数（`Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE`）。
 
-```kotlin
-val channelId = "your_channel_id"
-val joinResult = maasEngine?.joinChannel(channelId)
-if (joinResult == 0) {
-    // 加入频道成功
-} else {
-    // 加入频道失败
-}
+- **远端音频帧监听与本地保存（`RtcManager`）**
+  - 在 `registerAudioFrame()` 中设置 `onPlaybackAudioFrameBeforeMixing(...)` 回调，保存远端音频 PCM 到外部缓存目录文件（文件名包含 `channelId_uid_timestamp.pcm`）。
 
-val leaveResult = maasEngine?.leaveChannel()
-if (leaveResult == 0) {
-    // 离开频道成功
-} else {
-    // 离开频道失败
-}
-```
+- **离开与销毁（`MainActivity` 与 `RtcManager`）**
+  - `RtcManager.leaveChannel()` 退出频道。
+  - `RtcManager.destroy()` 销毁引擎与自定义音轨、释放回调和线程调度器；`MainActivity` 退出时也会调用。
 
-### 视频操作
+- **Token/UID 获取（`KeyCenter`）**
+  - `APP_ID`、`APP_CERTIFICATE`、`RTC_TOKEN` 来自 `BuildConfig`（通过 `local.properties` 注入）。
+  - `getRtcUid()` 随机生成并缓存本地 UID；`getRtcToken(channel, uid)` 若本地配置了 `RTC_TOKEN` 则直接返回，否则使用 `APP_CERTIFICATE` 本地生成临时 Token（仅用于测试）。
 
-#### 开始和停止视频
+### 资源与权限
 
-```kotlin
-val view: View? = /* 视频显示的视图 */
-val renderMode: MaaSConstants.RenderMode? = /* 渲染模式 */
-val position = MaaSConstants.VideoModulePosition.VIDEO_MODULE_POSITION_POST_CAPTURER
-
-val startVideoResult = maasEngine?.startVideo(view, renderMode, position)
-if (startVideoResult == 0) {
-    // 开始视频成功
-} else {
-    // 开始视频失败
-}
-
-val stopVideoResult = maasEngine?.stopVideo()
-if (stopVideoResult == 0) {
-    // 停止视频成功
-} else {
-    // 停止视频失败
-}
-```
-
-#### 设置视频编码配置
-
-```kotlin
-val width = 1280
-val height = 720
-val frameRate = MaaSConstants.FrameRate.FPS_30
-val orientationMode = MaaSConstants.OrientationMode.ORIENTATION_MODE_FIXED_LANDSCAPE
-val enableMirrorMode = true
-
-val setVideoEncoderConfigResult = maasEngine?.setVideoEncoderConfiguration(
-    width, height, frameRate, orientationMode, enableMirrorMode
-)
-if (setVideoEncoderConfigResult == 0) {
-    // 设置视频编码配置成功
-} else {
-    // 设置视频编码配置失败
-}
-```
-
-#### 设置远程视频
-
-```kotlin
-val remoteView: View? = /* 远程视频显示的视图 */
-val remoteRenderMode: MaaSConstants.RenderMode? = /* 远程渲染模式 */
-val remoteUid = 12345
-
-val setupRemoteVideoResult = maasEngine?.setupRemoteVideo(remoteView, remoteRenderMode, remoteUid)
-if (setupRemoteVideoResult == 0) {
-    // 设置远程视频成功
-} else {
-    // 设置远程视频失败
-}
-```
-
-#### 切换摄像头
-
-```kotlin
-val switchCameraResult = maasEngine?.switchCamera()
-if (switchCameraResult == 0) {
-    // 切换摄像头成功
-} else {
-    // 切换摄像头失败
-}
-```
-
-#### 添加和清除视频水印
-
-```kotlin
-val watermarkOptions = WatermarkOptions().apply {
-    positionInPortraitMode = WatermarkOptions.Rectangle(0, 0, 200, 200)
-    positionInLandscapeMode = WatermarkOptions.Rectangle(0, 0, 200, 200)
-    visibleInPreview = true
-}
-
-val rootView = window.decorView.rootView
-val screenBuffer = captureScreenToByteBuffer(rootView)
-
-val addWatermarkResult = maasEngine?.addVideoWatermark(
-    screenBuffer,
-    rootView.width,
-    rootView.height,
-    MaaSConstants.VideoFormat.VIDEO_PIXEL_RGBA,
-    watermarkOptions
-)
-if (addWatermarkResult == 0) {
-    // 添加水印成功
-} else {
-    // 添加水印失败
-}
-
-val clearWatermarksResult = maasEngine?.clearVideoWatermarks()
-if (clearWatermarksResult == 0) {
-    // 清除水印成功
-} else {
-    // 清除水印失败
-}
-```
-
-### 音频操作
-
-#### 启用和禁用音频
-
-```kotlin
-val enableAudioResult = maasEngine?.enableAudio()
-if (enableAudioResult == 0) {
-    // 启用音频成功
-} else {
-    // 启用音频失败
-}
-
-val disableAudioResult = maasEngine?.disableAudio()
-if (disableAudioResult == 0) {
-    // 禁用音频成功
-} else {
-    // 禁用音频失败
-}
-```
-
-#### 调整音量
-
-```kotlin
-val playbackVolume = 50
-val adjustPlaybackVolumeResult = maasEngine?.adjustPlaybackSignalVolume(playbackVolume)
-if (adjustPlaybackVolumeResult == 0) {
-    // 调整播放音量成功
-} else {
-    // 调整播放音量失败
-}
-
-val recordingVolume = 50
-val adjustRecordingVolumeResult = maasEngine?.adjustRecordingSignalVolume(recordingVolume)
-if (adjustRecordingVolumeResult == 0) {
-    // 调整录音音量成功
-} else {
-    // 调整录音音量失败
-}
-```
-
-### 消息操作
-
-#### 发送文本消息
-
-```kotlin
-val textMessage = "Hello, World!"
-val sendTextResult = maasEngine?.sendText(textMessage)
-if (sendTextResult == 0) {
-    // 发送文本消息成功
-} else {
-    // 发送文本消息失败
-}
-```
-
-#### 发送 RTM 消息
-
-```kotlin
-val rtmMessage = "RTM Message"
-val channelType = MaaSConstants.RtmChannelType.MESSAGE
-val sendRtmMessageResult = maasEngine?.sendRtmMessage(rtmMessage.toByteArray(), channelType)
-if (sendRtmMessageResult == 0) {
-    // 发送 RTM 消息成功
-} else {
-    // 发送 RTM 消息失败
-}
-```
-
-#### 发送音频元数据
-
-```kotlin
-val audioMetadata = byteArrayOf(1, 2, 3, 4, 5)
-val sendAudioMetadataResult = maasEngine?.sendAudioMetadata(audioMetadata)
-if (sendAudioMetadataResult == 0) {
-    // 发送音频元数据成功
-} else {
-    // 发送音频元数据失败
-}
-```
-
-### 获取 SDK 版本
-
-```kotlin
-val sdkVersion = MaaSEngine.getSdkVersion()
-println("SDK Version: $sdkVersion")
-```
-
-### 销毁 MaaSEngine 实例
-
-```kotlin
-MaaSEngine.destroy()
-```
-
-通过以上步骤，你可以轻松地使用 `MaaSEngine` 进行视频、音频和消息的处理。
+- **内置音频资源**：`assets/tts_out_48k_1ch.pcm`、`assets/nearin_power_48k_1ch.pcm`
+- **必要权限**：`RECORD_AUDIO`、`CAMERA`、`WRITE_EXTERNAL_STORAGE`

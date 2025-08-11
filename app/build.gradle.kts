@@ -14,11 +14,11 @@ if (localPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "io.agora.ai.test"
+    namespace = "io.agora.ai.burst_test"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "io.agora.ai.test"
+        applicationId = "io.agora.ai.burst_test"
         minSdk = 23
         targetSdk = 34
         versionCode = 1
@@ -96,12 +96,11 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    implementation(project(":maas"))
-
     implementation(libs.easypermissions)
     implementation(libs.xpopup)
     implementation(libs.agora.authentication)
     implementation(libs.commons.codec)
     implementation(libs.gson)
-    implementation(libs.mmkv)
+
+    implementation(libs.agora.rtc)
 }
