@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string-array name="predefined_app_ids">
-        <item>aab8b8f5a8cd4469a63042fcfafe7063</item>
-        <item>2b1a45f016b0479c9530d0ac69ed05bb</item>
-        <!-- Add more predefined App IDs here -->
-    </string-array>
-</resources> 
