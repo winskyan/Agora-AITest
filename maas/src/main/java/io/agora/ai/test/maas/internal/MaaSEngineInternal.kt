@@ -42,6 +42,7 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
+@OptIn(ExperimentalStdlibApi::class)
 class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mRtcEngine: RtcEngine? = null
     private var mMaaSEngineConfiguration: MaaSEngineConfiguration? = null
