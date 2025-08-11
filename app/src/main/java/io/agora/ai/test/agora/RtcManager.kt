@@ -358,7 +358,6 @@ object RtcManager {
         timestamp: Long,
         sampleRate: Int,
         channels: Int,
-        bytesPerSample: Int
     ): Int {
         if (mRtcEngine == null) {
             Log.e(

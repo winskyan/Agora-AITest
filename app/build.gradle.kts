@@ -89,6 +89,7 @@ android {
 
 
 dependencies {
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -102,5 +103,5 @@ dependencies {
     implementation(libs.commons.codec)
     implementation(libs.gson)
 
-    implementation(libs.agora.rtc)
+    //implementation(libs.agora.rtc)
 }

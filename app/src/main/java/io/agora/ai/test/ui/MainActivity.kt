@@ -183,7 +183,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
             RtcManager.pushExternalAudioFrame(
                 fileBytes,
                 System.currentTimeMillis(),
-                48000, 1, 2
+                48000, 1
             )
 
             mAudioFileReader = AudioFileReader(
@@ -197,8 +197,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                                     buffer,
                                     timestamp,
                                     it.getSampleRate(),
-                                    it.getNumOfChannels(),
-                                    it.getBytePerSample()
+                                    it.getNumOfChannels()
                                 )
                             }
                         }
