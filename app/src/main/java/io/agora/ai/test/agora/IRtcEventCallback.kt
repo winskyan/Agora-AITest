@@ -33,4 +33,8 @@ interface IRtcEventCallback {
     fun onAudioMetadataReceived(uid: Int, metadata: ByteArray?) {
 
     }
+
+    fun onPlaybackAudioFrameFinished() {
+
+    }
 }

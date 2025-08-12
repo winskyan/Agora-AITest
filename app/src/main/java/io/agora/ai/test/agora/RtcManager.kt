@@ -1,8 +1,8 @@
 package io.agora.ai.test.agora
 
 import android.content.Context
-import android.util.Log
 import io.agora.ai.test.constants.ExamplesConstants
+import io.agora.ai.test.utils.LogUtils
 import io.agora.rtc2.ChannelMediaOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IAudioFrameObserver
@@ -15,7 +15,9 @@ import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -24,6 +26,7 @@ import java.util.concurrent.Executors
 
 object RtcManager {
     private const val TAG = "${ExamplesConstants.TAG}-RtcManager"
+    private const val PLAYBACK_AUDIO_FRAME_TIMEOUT = 200 // ms
     private var mRtcEngine: RtcEngine? = null
     private var mCustomAudioTrackId = -1
 
@@ -36,9 +39,23 @@ object RtcManager {
 
     private var mAudioFileName = ""
 
+    private var playbackFinishJob: Job? = null
+
+    private fun schedulePlaybackFinishTimer() {
+        playbackFinishJob?.cancel()
+        playbackFinishJob = mSingleThreadScope.launch {
+            delay(PLAYBACK_AUDIO_FRAME_TIMEOUT.toLong())
+            io.agora.ai.test.utils.LogUtils.d(
+                TAG,
+                "onPlaybackAudioFrame finished due to timeout ${PLAYBACK_AUDIO_FRAME_TIMEOUT}ms"
+            )
+            mEventCallback?.onPlaybackAudioFrameFinished()
+        }
+    }
+
     private var rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
-            Log.d(
+            LogUtils.d(
                 TAG,
                 "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
             )
@@ -51,35 +68,35 @@ object RtcManager {
         }
 
         override fun onLeaveChannel(stats: RtcStats) {
-            Log.d(TAG, "onLeaveChannel")
+            LogUtils.d(TAG, "onLeaveChannel")
             mEventCallback?.onLeaveChannelSuccess()
         }
 
         override fun onUserJoined(uid: Int, elapsed: Int) {
-            Log.d(TAG, "onUserJoined uid:$uid elapsed:$elapsed")
+            LogUtils.d(TAG, "onUserJoined uid:$uid elapsed:$elapsed")
             mEventCallback?.onUserJoined(uid, elapsed)
         }
 
         override fun onUserOffline(uid: Int, reason: Int) {
-            Log.d(TAG, "onUserOffline uid:$uid reason:$reason")
+            LogUtils.d(TAG, "onUserOffline uid:$uid reason:$reason")
             mEventCallback?.onUserOffline(uid, reason)
         }
     }
 
     fun initialize(context: Context, appId: String, eventCallback: IRtcEventCallback): Int {
-        Log.d(TAG, "RtcManager initialize")
+        LogUtils.d(TAG, "RtcManager initialize")
         if (mRtcEngine != null) {
-            Log.i(TAG, "initialize error: already initialized")
+            LogUtils.i(TAG, "initialize error: already initialized")
             return Constants.ERR_OK
         }
 
         mEventCallback = eventCallback
 
         mAudioFileName = context.externalCacheDir?.absolutePath + "/audio_"
-        Log.d(TAG, "mAudioFileName:$mAudioFileName")
+        LogUtils.d(TAG, "mAudioFileName:$mAudioFileName")
 
         try {
-            Log.d(TAG, "RtcEngine version:" + RtcEngine.getSdkVersion())
+            LogUtils.d(TAG, "RtcEngine version:" + RtcEngine.getSdkVersion())
             val rtcEngineConfig = RtcEngineConfig()
             rtcEngineConfig.mContext = context
             rtcEngineConfig.mAppId = appId
@@ -89,6 +106,13 @@ object RtcManager {
 
             val logConfig = LogConfig()
             logConfig.level = Constants.LOG_LEVEL_INFO
+            try {
+                val agoraLogFile = java.io.File(LogUtils.getLogDir(), "agora_rtc.log")
+                logConfig.filePath = agoraLogFile.absolutePath
+                logConfig.fileSizeInKB = 20480
+                LogUtils.d(TAG, "Agora log file: ${agoraLogFile.absolutePath}")
+            } catch (_: Throwable) {
+            }
             rtcEngineConfig.mLogConfig = logConfig
 
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
@@ -105,12 +129,12 @@ object RtcManager {
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
 
-            Log.d(
+            LogUtils.d(
                 TAG, "initRtcEngine success"
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e(
+            LogUtils.e(
                 TAG, "initRtcEngine error:" + e.message
             )
             return -Constants.ERR_FAILED
@@ -119,14 +143,14 @@ object RtcManager {
     }
 
     private fun setAgoraRtcParameters(parameters: String) {
-        Log.d(TAG, "setAgoraRtcParameters parameters:$parameters")
+        LogUtils.d(TAG, "setAgoraRtcParameters parameters:$parameters")
         if (mRtcEngine == null) {
-            Log.e(TAG, "setAgoraRtcParameters error: not initialized")
+            LogUtils.e(TAG, "setAgoraRtcParameters error: not initialized")
             return
         }
         val ret = mRtcEngine?.setParameters(parameters) ?: -1
         if (ret != 0) {
-            Log.e(
+            LogUtils.e(
                 TAG,
                 "setAgoraRtcParameters parameters:${parameters} error: $ret"
             )
@@ -141,7 +165,7 @@ object RtcManager {
             Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
             audioTrackConfig
         ) ?: 0
-        Log.d(
+        LogUtils.d(
             TAG,
             "createCustomAudioTrack mCustomAudioTrackId:$mCustomAudioTrackId"
         )
@@ -150,7 +174,7 @@ object RtcManager {
     private fun registerAudioFrame(
     ) {
         if (mRtcEngine == null) {
-            Log.e(TAG, "registerAudioFrame error: not initialized")
+            LogUtils.e(TAG, "registerAudioFrame error: not initialized")
             return
         }
 
@@ -229,11 +253,13 @@ object RtcManager {
                 rtpTimestamp: Int,
                 presentationMs: Long
             ): Boolean {
-                Log.d(
+                LogUtils.d(
                     TAG,
-                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid"
+                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs"
                 )
                 saveAudioFrame(buffer)
+                // Reset timeout timer on each frame received; callback finish if no new frame received within PLAYBACK_AUDIO_FRAME_TIMEOUT
+                schedulePlaybackFinishTimer()
                 return true
             }
 
@@ -262,6 +288,7 @@ object RtcManager {
     private fun saveAudioFrame(buffer: ByteBuffer?) {
         if (buffer == null) return
 
+        // must get data synchronously and process data asynchronously
         buffer.rewind()
         val byteArray = ByteArray(buffer.remaining())
         buffer.get(byteArray)
@@ -286,12 +313,12 @@ object RtcManager {
         rtcToken: String,
         roleType: Int
     ): Int {
-        Log.d(
+        LogUtils.d(
             TAG,
             "joinChannelEx channelId:$channelId roleType:$roleType"
         )
         if (mRtcEngine == null) {
-            Log.e(TAG, "joinChannelEx error: not initialized")
+            LogUtils.e(TAG, "joinChannelEx error: not initialized")
             return -Constants.ERR_NOT_INITIALIZED
         }
         try {
@@ -321,12 +348,12 @@ object RtcManager {
             )
 
 
-            Log.d(
+            LogUtils.d(
                 TAG, "joinChannelEx ret:$ret"
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e(
+            LogUtils.e(
                 TAG, "joinChannelEx error:" + e.message
             )
             return -Constants.ERR_FAILED
@@ -336,16 +363,18 @@ object RtcManager {
     }
 
     fun leaveChannel(): Int {
-        Log.d(TAG, "leaveChannel")
+        LogUtils.d(TAG, "leaveChannel")
         if (mRtcEngine == null) {
-            Log.e(TAG, "leaveChannel error: not initialized")
+            LogUtils.e(TAG, "leaveChannel error: not initialized")
             return -Constants.ERR_NOT_INITIALIZED
         }
         try {
+            playbackFinishJob?.cancel()
+            playbackFinishJob = null
             mRtcEngine?.leaveChannel()
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e(
+            LogUtils.e(
                 TAG, "leaveChannel error:" + e.message
             )
             return -Constants.ERR_FAILED
@@ -360,7 +389,7 @@ object RtcManager {
         channels: Int,
     ): Int {
         if (mRtcEngine == null) {
-            Log.e(
+            LogUtils.e(
                 TAG,
                 "pushExternalVideoFrameByIdInternal error: not initialized"
             )
@@ -381,7 +410,7 @@ object RtcManager {
         return if (ret == 0) {
             Constants.ERR_OK
         } else {
-            Log.e(TAG, "pushExternalAudioFrame error: $ret")
+            LogUtils.e(TAG, "pushExternalAudioFrame error: $ret")
             -Constants.ERR_FAILED
         }
     }
@@ -391,6 +420,8 @@ object RtcManager {
             mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
             mCustomAudioTrackId = -1
         }
+        playbackFinishJob?.cancel()
+        playbackFinishJob = null
         RtcEngine.destroy()
         mRtcEngine = null
         mRtcConnection = null
@@ -399,7 +430,7 @@ object RtcManager {
 
         mExecutor.close()
 
-        Log.d(TAG, "rtc destroy")
+        LogUtils.d(TAG, "rtc destroy")
     }
 
 

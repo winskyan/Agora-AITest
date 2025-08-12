@@ -2,7 +2,6 @@ package io.agora.ai.test.ui
 
 import android.Manifest
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
@@ -13,6 +12,7 @@ import io.agora.ai.test.agora.RtcManager
 import io.agora.ai.test.constants.ExamplesConstants
 import io.agora.ai.test.utils.AudioFileReader
 import io.agora.ai.test.utils.KeyCenter
+import io.agora.ai.test.utils.LogUtils
 import io.agora.ai.test.utils.Utils
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
@@ -53,9 +53,9 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
             )
         if (EasyPermissions.hasPermissions(this, *permissions)) {
             // 已经获取到权限，执行相应的操作
-            Log.d(TAG, "granted permission")
+            LogUtils.d(TAG, "granted permission")
         } else {
-            Log.i(TAG, "requestPermissions")
+            LogUtils.i(TAG, "requestPermissions")
             EasyPermissions.requestPermissions(
                 this,
                 "需要录音权限",
@@ -76,11 +76,11 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
         // 权限被授予，执行相应的操作
-        Log.d(TAG, "onPermissionsGranted requestCode:$requestCode perms:$perms")
+        LogUtils.d(TAG, "onPermissionsGranted requestCode:$requestCode perms:$perms")
     }
 
     fun onPermissionsDenied(requestCode: Int, perms: MutableList<String>) {
-        Log.d(TAG, "onPermissionsDenied requestCode:$requestCode perms:$perms")
+        LogUtils.d(TAG, "onPermissionsDenied requestCode:$requestCode perms:$perms")
         // 权限被拒绝，显示一个提示信息
         if (EasyPermissions.somePermissionPermanentlyDenied(this, perms)) {
             // 如果权限被永久拒绝，可以显示一个对话框引导用户去应用设置页面手动授权
@@ -157,7 +157,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
     }
 
     override fun onLeaveChannelSuccess() {
-        Log.d(TAG, "onLeaveChannelSuccess")
+        LogUtils.d(TAG, "onLeaveChannelSuccess")
         mJoinSuccess = false
         runOnUiThread {
             updateToolbarTitle(getString(R.string.app_name))
@@ -174,12 +174,16 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
     override fun onUserOffline(uid: Int, reason: Int) {
     }
 
+    override fun onPlaybackAudioFrameFinished() {
+        LogUtils.i(TAG, "onPlaybackAudioFrameFinished")
+    }
+
 
     private fun handleJoinChannelSuccess() {
         CoroutineScope(Dispatchers.IO).launch {
             val fileBytes =
                 Utils.readAssetBytesContent(applicationContext, "tts_out_48k_1ch.pcm")
-            Log.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
+            LogUtils.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
             RtcManager.pushExternalAudioFrame(
                 fileBytes,
                 System.currentTimeMillis(),
