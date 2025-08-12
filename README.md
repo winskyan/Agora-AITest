@@ -69,3 +69,48 @@ APP_CERTIFICATE=你的证书密钥
 - `RtcEngine.destroy()` 并清理回调、连接与线程调度器
 
 说明：上述步骤在本项目中分别由 `RtcManager.initialize`、`RtcManager.registerAudioFrame`（内部调用）、`RtcManager.createCustomAudioTrack`（内部方法 `initCustomAudioTracker`）、`RtcManager.joinChannelEx`、`RtcManager.pushExternalAudioFrame`、`RtcManager.leaveChannel`、`RtcManager.destroy` 具体实现；触发流程由 `MainActivity` 的按钮点击与回调驱动。
+
+## AudioFrameManager 使用说明
+
+`AudioFrameManager` 用于管理远端播放音频帧事件：通过对收到的远端 PCM 帧进行“静默超时”判定（默认 200ms），在一段音频播放结束时回调上层，适合 TTS/AI 对话等需按“句”感知播放结束的场景。
+
+- **核心能力**：
+  - `init(callback)`：注册回调，开始管理会话与帧事件
+  - `updateSession(sessionId, index, text)`：更新当前会话标识（例如一段 TTS 的 id），用于回调携带上下文
+  - `processAudioFrame(data)`：喂入远端 PCM 帧（在音频回调中调用）；若超时未再收到帧则触发 `onSessionEnd`
+  - `release()`：释放内部资源
+
+- **最小接入示例（Kotlin）**：
+
+```kotlin
+// 1) 初始化（建议在 Rtc 初始化完成后）
+val audioCallback = object : AudioFrameManager.ICallback {
+    override fun onLineEnd(sessionId: String, index: Int) {
+        // 可选：一行结束（若有行级别划分）
+    }
+    override fun onSessionEnd(sessionId: String) {
+        // 一段音频播放结束（200ms 未再收到帧），可进行业务处理：切下一句/更新 UI 等
+    }
+}
+AudioFrameManager.init(audioCallback)
+
+// 2) 新的一段播放开始时（如一条 TTS 结果）更新会话信息
+AudioFrameManager.updateSession(sessionId = "session-123", index = 0, text = "你好")
+
+// 3) 在 onPlaybackAudioFrameBeforeMixing(...) 中喂入 PCM
+buffer?.rewind()
+val bytes = ByteArray(buffer?.remaining() ?: 0)
+buffer?.get(bytes)
+if (bytes.isNotEmpty()) {
+    AudioFrameManager.processAudioFrame(bytes)
+}
+
+// 4) 退出或销毁时
+AudioFrameManager.release()
+```
+
+- **与本项目的关系**：
+  - 已在 `RtcManager.initialize` 中调用 `AudioFrameManager.init(...)`
+  - 已在 `onPlaybackAudioFrameBeforeMixing(...)` 中调用 `processAudioFrame(...)`
+  - 已在 `RtcManager.destroy` 中调用 `AudioFrameManager.release()`
+  - 如需按业务维度感知“句/段”结束，仅需在开始播放新段时调用 `updateSession(...)`，其余逻辑已对接好
