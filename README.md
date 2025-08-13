@@ -72,45 +72,95 @@ APP_CERTIFICATE=你的证书密钥
 
 ## AudioFrameManager 使用说明
 
-`AudioFrameManager` 用于管理远端播放音频帧事件：通过对收到的远端 PCM 帧进行“静默超时”判定（默认 200ms），在一段音频播放结束时回调上层，适合 TTS/AI 对话等需按“句”感知播放结束的场景。
+`AudioFrameManager` 用于“句级”跟踪远端播放音频帧的结束时刻，典型用于 TTS/AI 对话：当某句播放完毕（静默超时或 PTS 跳变）时，回调上层标识该句已结束。
 
-- **核心能力**：
-  - `init(callback)`：注册回调，开始管理会话与帧事件
-  - `updateSession(sessionId, index, text)`：更新当前会话标识（例如一段 TTS 的 id），用于回调携带上下文
-  - `processAudioFrame(data)`：喂入远端 PCM 帧（在音频回调中调用）；若超时未再收到帧则触发 `onSessionEnd`
-  - `release()`：释放内部资源
+- **工作机制（简述）**：
+  - 句元信息登记：业务侧在开始播放一条句子前，通过 `updateSentence(...)` 或 `updateSentenceWithJson(...)` 登记该句的 `sentenceId`、`basePts`、`sentenceDataLength`（可选长度指标）与是否为轮次结尾 `isRoundEnd`。
+  - 分桶定位：内部按 `SENTENCE_PTS_THRESHOLD_MS` 对 PTS 进行分桶，`basePts` 与音频帧的上一帧 `pts` 经相同阈值取整后映射到同一“句桶”。
+  - 结束判定：
+    - 静默超时：每次收到帧都会重置一个定时器（默认 200ms）。超时触发时，若能解析到上一帧所属句子，则回调结束。
+    - PTS 跳变：若两帧之间的 PTS 跳变超过 `PLAYBACK_PTS_CHANGE_THRESHOLD_MS`（默认 1000ms），判定上一句结束并回调。
 
-- **最小接入示例（Kotlin）**：
+- **常量（可按需调整源码内取值）**：
+  - `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS = 200`：静默超时阈值（毫秒）。
+  - `PLAYBACK_PTS_CHANGE_THRESHOLD_MS = 1000`：帧间 PTS 跳变判定阈值（毫秒）。
+  - `SENTENCE_PTS_THRESHOLD_MS = 50000`：PTS 分桶阈值（毫秒）。`basePts` 与上一帧 `pts` 会按该阈值向下取整对齐。
+
+### API 一览
+
+- `AudioFrameManager.init(callback: ICallback)`：初始化并注册回调。
+  - `ICallback.onSentenceEnd(sentenceId: String, isRoundEnd: Boolean)`：句子结束时回调；`isRoundEnd` 表示该句是否标志一轮会话的结束。
+
+- `AudioFrameManager.updateSentence(
+    sentenceId: String,
+    basePts: Long,
+    sentenceDataLength: Int,
+    isRoundEnd: Boolean
+  )`
+  - 在句子开始播放前登记元信息。
+  - 约束：`sentenceId` 不可为空；若同一 `basePts` 已存在，将忽略本次登记。
+  - 建议：确保 `basePts` 与后续 `processAudioFrame(..., pts)` 中的 `pts` 采用同一时间基，并满足分桶后一致。
+
+- `AudioFrameManager.updateSentenceWithJson(sentencePayloadJson: String)`：以 JSON 一次性传入句元信息。
+  - JSON 示例：`{"sentenceId":"123","basePts":50000,"sentenceDataLength":1000,"isRoundEnd":true}`
+
+- `AudioFrameManager.processAudioFrame(data: ByteArray, pts: Long)`：输入远端 PCM 帧及其 PTS，用于进行结束判定。
+  - 要求：`pts` 需单调递增；必须与 `basePts` 处于同一时间基（否则无法映射到正确句桶）。
+
+- `AudioFrameManager.release()`：释放内部资源与线程。
+
+### 典型接入流程（Kotlin）
 
 ```kotlin
-// 1) 初始化（建议在 Rtc 初始化完成后）
+// 1) 注册回调
 val audioCallback = object : AudioFrameManager.ICallback {
-    override fun onLineEnd(sessionId: String, index: Int) {
-        // 可选：一行结束（若有行级别划分）
-    }
-    override fun onSessionEnd(sessionId: String) {
-        // 一段音频播放结束（200ms 未再收到帧），可进行业务处理：切下一句/更新 UI 等
+    override fun onSentenceEnd(sentenceId: String, isRoundEnd: Boolean) {
+        // 一句播放结束，可进行：切下一句、刷新 UI、触发业务回调等
     }
 }
 AudioFrameManager.init(audioCallback)
 
-// 2) 新的一段播放开始时（如一条 TTS 结果）更新会话信息
-AudioFrameManager.updateSession(sessionId = "session-123", index = 0, text = "你好")
+// 2) 新句开始播放前，登记句元信息（可选：使用 JSON 版本）
+AudioFrameManager.updateSentence(
+    sentenceId = "sent-001",
+    basePts = 100_000L, // 与后续音频帧 pts 同一时间基，并经 50s 分桶可映射到同一桶
+    sentenceDataLength = 48_000, // 可作为参考长度（字节数/样本数，视你的定义而定）
+    isRoundEnd = false
+)
+// 或
+AudioFrameManager.updateSentenceWithJson(
+    "{" +
+        "\"sentenceId\":\"sent-001\"," +
+        "\"basePts\":100000," +
+        "\"sentenceDataLength\":48000," +
+        "\"isRoundEnd\":false" +
+    "}"
+)
 
-// 3) 在 onPlaybackAudioFrameBeforeMixing(...) 中喂入 PCM
+// 3) 在 onPlaybackAudioFrameBeforeMixing(...) 回调中喂入 PCM 与 PTS
 buffer?.rewind()
 val bytes = ByteArray(buffer?.remaining() ?: 0)
 buffer?.get(bytes)
 if (bytes.isNotEmpty()) {
-    AudioFrameManager.processAudioFrame(bytes)
+    // pts 使用引擎回调提供的时间戳；若无则需与 basePts 保持同一时间基
+    AudioFrameManager.processAudioFrame(bytes, pts)
 }
 
 // 4) 退出或销毁时
 AudioFrameManager.release()
 ```
 
-- **与本项目的关系**：
-  - 已在 `RtcManager.initialize` 中调用 `AudioFrameManager.init(...)`
-  - 已在 `onPlaybackAudioFrameBeforeMixing(...)` 中调用 `processAudioFrame(...)`
-  - 已在 `RtcManager.destroy` 中调用 `AudioFrameManager.release()`
-  - 如需按业务维度感知“句/段”结束，仅需在开始播放新段时调用 `updateSession(...)`，其余逻辑已对接好
+### 注意事项与调优建议
+
+- 确保 `pts` 单调递增；若出现乱序或回退，建议在业务侧丢弃异常帧或进行时间基校正。
+- `basePts` 与 `pts` 必须来自同一时间基；否则分桶映射不到同一句子，导致无法回调。
+- 如需更灵敏/更稳健的结束判定，可按业务场景调整：
+  - 减小 `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS` 以更快结束；或增大以避免断句过碎。
+  - 调整 `PLAYBACK_PTS_CHANGE_THRESHOLD_MS`，匹配你的 PTS 抖动特性。
+  - 视需要引入“数据量阈值”终止（当前实现默认依赖超时与 PTS 跳变，若要启用可在源码中补充长度判定）。
+
+与本项目的关系：
+
+- 已在 `RtcManager.initialize` 中调用 `AudioFrameManager.init(...)`
+- 已在 `onPlaybackAudioFrameBeforeMixing(...)` 中调用 `processAudioFrame(data, pts)`
+- 已在 `RtcManager.destroy` 中调用 `AudioFrameManager.release()`

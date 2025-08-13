@@ -37,13 +37,13 @@ object RtcManager {
 
     private var mAudioFileName = ""
 
-    private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
-        override fun onLineEnd(sessionId: String, index: Int) {
-            LogUtils.d(TAG, "onLineEnd sessionId:$sessionId index:$index")
-        }
+    private var mAudioFrameIndex = 0
+    private var mFrameStartTime = 0L
 
-        override fun onSessionEnd(sessionId: String) {
-            LogUtils.d(TAG, "onSessionEnd sessionId:$sessionId")
+    private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
+        override fun onSentenceEnd(sentenceId: String, isRoundEnd: Boolean) {
+            super.onSentenceEnd(sentenceId, isRoundEnd)
+            LogUtils.i(TAG, "onSentenceEnd sentenceId:$sentenceId isRoundEnd:$isRoundEnd")
             mRtcEventCallback?.onPlaybackAudioFrameFinished()
         }
     }
@@ -75,6 +75,16 @@ object RtcManager {
         override fun onUserOffline(uid: Int, reason: Int) {
             LogUtils.d(TAG, "onUserOffline uid:$uid reason:$reason")
             mRtcEventCallback?.onUserOffline(uid, reason)
+        }
+
+        override fun onStreamMessage(uid: Int, streamId: Int, data: ByteArray?) {
+            super.onStreamMessage(uid, streamId, data)
+            LogUtils.d(
+                TAG,
+                "onStreamMessage uid:$uid streamId:$streamId data:${String(data ?: ByteArray(0))}"
+            )
+
+            AudioFrameManager.updateSentenceWithJson(String(data ?: ByteArray(0)))
         }
     }
 
@@ -119,7 +129,7 @@ object RtcManager {
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":0}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":0}")
-//            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
@@ -250,19 +260,34 @@ object RtcManager {
                 rtpTimestamp: Int,
                 presentationMs: Long
             ): Boolean {
-                LogUtils.d(
-                    TAG,
-                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs"
-                )
+
                 // must get data synchronously and process data asynchronously
                 buffer?.rewind()
                 val byteArray = ByteArray(buffer?.remaining() ?: 0)
                 buffer?.get(byteArray)
 
+                if (mFrameStartTime == 0L) {
+                    mFrameStartTime = System.currentTimeMillis()
+                }
+
+                LogUtils.d(
+                    TAG,
+                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs index:$mAudioFrameIndex dataSize:${byteArray.size}"
+                )
+                mAudioFrameIndex++
+
+                if (mAudioFrameIndex % 50 == 0) {
+                    LogUtils.d(
+                        TAG,
+                        "onPlaybackAudioFrameBeforeMixing index:$mAudioFrameIndex per 50 frame time:${System.currentTimeMillis() - mFrameStartTime}ms"
+                    )
+                    mFrameStartTime = System.currentTimeMillis()
+                }
+
                 if (byteArray.isEmpty()) {
                     return true
                 }
-                AudioFrameManager.processAudioFrame(byteArray)
+                AudioFrameManager.processAudioFrame(byteArray, presentationMs)
                 saveAudioFrame(byteArray)
                 return true
             }
@@ -318,6 +343,8 @@ object RtcManager {
             return -Constants.ERR_NOT_INITIALIZED
         }
         try {
+            mAudioFrameIndex = 0
+            mFrameStartTime = 0L
             registerAudioFrame()
             initCustomAudioTracker()
 
