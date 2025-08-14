@@ -2,4 +2,5 @@
     <string name="app_name">AI Burst Example</string>
     <string name="join">Join</string>
     <string name="leave">Leave</string>
+    <string name="send_audio_metadata">Send Audio Metadata</string>
 </resources>

@@ -114,6 +114,11 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                 )
             }
         }
+
+        binding.btnSendAudioMetadata.setOnClickListener {
+            RtcManager.sendAudioMetadataEx("aaa".toByteArray())
+
+        }
     }
 
     private fun handleOnBackPressed() {

@@ -41,10 +41,15 @@ object RtcManager {
     private var mFrameStartTime = 0L
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
-        override fun onSentenceEnd(sentenceId: String, isRoundEnd: Boolean) {
-            super.onSentenceEnd(sentenceId, isRoundEnd)
-            LogUtils.i(TAG, "onSentenceEnd sentenceId:$sentenceId isRoundEnd:$isRoundEnd")
-            mRtcEventCallback?.onPlaybackAudioFrameFinished()
+        override fun onSentenceEnd(sessionId: Int, sentenceId: Int, isSessionEnd: Boolean) {
+            super.onSentenceEnd(sessionId, sentenceId, isSessionEnd)
+            LogUtils.i(
+                TAG,
+                "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId isSessionEnd:$isSessionEnd"
+            )
+            if (isSessionEnd) {
+                mRtcEventCallback?.onPlaybackAudioFrameFinished()
+            }
         }
     }
 
@@ -84,7 +89,7 @@ object RtcManager {
                 "onStreamMessage uid:$uid streamId:$streamId data:${String(data ?: ByteArray(0))}"
             )
 
-            AudioFrameManager.updateSentenceWithJson(String(data ?: ByteArray(0)))
+            // Metadata registration no longer required. Kept for compatibility: ignore.
         }
     }
 
@@ -434,6 +439,10 @@ object RtcManager {
             LogUtils.e(TAG, "pushExternalAudioFrame error: $ret")
             -Constants.ERR_FAILED
         }
+    }
+
+    fun sendAudioMetadataEx(data: ByteArray) {
+        (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
     }
 
     fun destroy() {
