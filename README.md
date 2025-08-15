@@ -72,7 +72,7 @@ APP_CERTIFICATE=你的证书密钥
 
 ## AudioFrameManager 使用说明
 
-`AudioFrameManager` 用于“句级/轮次级”跟踪远端播放音频帧的结束时刻（TTS/AI 对话等场景）。新版实现不再需要业务侧进行句元登记，而是直接从 `processAudioFrame` 的 `pts` 位域中解析：高 16 位为 `sessionId`，中间 14 位为 `sentenceId`，接着 2 位为 `isEnd`（该句是否为本轮最后一句），低 32 位为 `basePts`。
+`AudioFrameManager` 用于“句级/轮次级”跟踪远端播放音频帧的结束时刻（TTS/AI 对话等场景）。新版实现不再需要业务侧进行句元登记，而是直接从 `processAudioFrame` 的 `pts` 位域中解析（当 `version=2` 时）：高 4 位 `version`（不超过 0x7）| 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` | 2 位 `isEnd` | 低 16 位 `basePts`。
 
 - **工作机制（简述）**：
   - 直接解析 `pts` 位域获取 `sessionId`、`sentenceId`、`isEnd`；每条句子的 `isEnd` 在该句内是固定值，`isEnd=1` 表示该句是本轮最后一句。
@@ -91,7 +91,8 @@ APP_CERTIFICATE=你的证书密钥
     - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化或 200ms 超时且 `isEnd=1`）
 
 - `AudioFrameManager.processAudioFrame(data: ByteArray, pts: Long)`：输入远端 PCM 帧及其 PTS，用于进行结束判定。
-  - PTS 位域格式：高 16 位 `sessionId` | 中间 14 位 `sentenceId` | 2 位 `isEnd` | 低 32 位 `basePts`。
+  - 当 `version=2`：高 4 位 `version` | 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` | 2 位 `isEnd` | 低 16 位 `basePts`。
+  - 其他 `version` 将被忽略（当前实现仅处理 `version=2`）。
 
 - `AudioFrameManager.release()`：释放内部资源与线程。
 

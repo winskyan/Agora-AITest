@@ -49,10 +49,11 @@ object AudioFrameManager {
 
     /**
      * Process an audio frame.
-     * pts bit layout: [high 16 bits: sessionId] | [middle 14 bits: sentenceId] | [2 bits: isEnd] | [low 32 bits: basePts]
-     * End detection rule:
-     * - If isEnd == 0: no frame for 200ms -> sentence ended (isSessionEnd = false)
-     * - If isEnd == 1: no frame for 200ms -> session ended (isSessionEnd = true)
+     * When version = 2, pts bit layout:
+     * [high 4 bits: version] | [16 bits: sessionId] | [16 bits: sentenceId] | [10 bits: chunkId] | [2 bits: isEnd] | [low 16 bits: basePts]
+     * End detection rule (200ms timeout window):
+     * - isEnd == 0 -> sentence end (isSessionEnd = false)
+     * - isEnd != 0 -> session end (isSessionEnd = true)
      */
     fun processAudioFrame(data: ByteArray, pts: Long) {
         if (pts == 0L) {
@@ -60,16 +61,19 @@ object AudioFrameManager {
         }
         mAudioFrameFinishJob?.cancel()
 
-        val sessionId = ((pts ushr 48) and 0xFFFFL).toInt()
-        val sentenceId = ((pts ushr 34) and 0x3FFFL).toInt()
-        val isEndBits = ((pts ushr 32) and 0x3L).toInt()
+        val version = ((pts ushr 60) and 0xFL).toInt()
+        val sessionId = ((pts ushr 44) and 0xFFFFL).toInt()
+        val sentenceId = ((pts ushr 28) and 0xFFFFL).toInt()
+        val chunkId = ((pts ushr 18) and 0x3FFL).toInt()
+        val isEndBits = ((pts ushr 16) and 0x3L).toInt()
+        val basePts = (pts and 0xFFFFL).toInt()
         val isSessionEnd = isEndBits != 0
 
         val currentPayload = SentencePayload(sessionId, sentenceId, isSessionEnd)
 
         LogUtils.d(
             TAG,
-            "processAudioFrame currentPayload:${currentPayload}"
+            "processAudioFrame version:${version} currentPayload:${currentPayload} chunkId:$chunkId basePts:$basePts"
         )
 
         val previousPayload = mLastPayload
@@ -98,13 +102,13 @@ object AudioFrameManager {
                 "onPlaybackAudioFrame finished due to timeout ${PLAYBACK_AUDIO_FRAME_TIMEOUT_MS}ms"
             )
             // timeout means no new frame arrived within window; decide end type by last payload's isSessionEnd
-            if (mLastPayload != null) {
-                callbackOnSentenceEnd(
-                    mLastPayload!!.sessionId,
-                    mLastPayload!!.sentenceId,
-                    mLastPayload!!.isSessionEnd
-                )
-            }
+            val snapshot = mLastPayload
+            val s = snapshot ?: return@launch
+            callbackOnSentenceEnd(
+                s.sessionId,
+                s.sentenceId,
+                s.isSessionEnd
+            )
         }
     }
 
