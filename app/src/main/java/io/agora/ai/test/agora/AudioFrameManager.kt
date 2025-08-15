@@ -20,15 +20,39 @@ object AudioFrameManager {
     private var mLastPayload: SentencePayload? = null
 
 
+    /**
+     * Callback interface to notify sentence/session end events.
+     *
+     * Terminology:
+     * - session: a full round of dialog from start to end
+     * - sentence: a single utterance within a session
+     * - chunk: a fragment of audio belonging to one sentence
+     * - isSessionEnd: whether this marks the end of the session
+     */
     interface ICallback {
-        fun onSentenceEnd(sessionId: Int, sentenceId: Int, isSessionEnd: Boolean) {
+        /**
+         * Invoked when a sentence or a whole session ends.
+         * @param sessionId identifier of the dialog session
+         * @param sentenceId identifier of the sentence within the session
+         * @param chunkId identifier of the chunk within the sentence
+         * @param isSessionEnd true if a session end is detected; false if only a sentence end is detected
+         */
+        fun onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean) {
 
         }
     }
 
+    /**
+     * Parsed tracking unit from pts fields.
+     * @param sessionId identifier of the dialog session
+     * @param sentenceId identifier of the sentence within the session
+     * @param chunkId identifier of the chunk within the sentence
+     * @param isSessionEnd whether this marks the end of the session
+     */
     data class SentencePayload(
         val sessionId: Int,
         val sentenceId: Int,
+        val chunkId: Int,
         val isSessionEnd: Boolean
     )
 
@@ -49,11 +73,17 @@ object AudioFrameManager {
 
     /**
      * Process an audio frame.
+     *
      * When version = 2, pts bit layout:
      * [high 4 bits: version] | [16 bits: sessionId] | [16 bits: sentenceId] | [10 bits: chunkId] | [2 bits: isEnd] | [low 16 bits: basePts]
-     * End detection rule (200ms timeout window):
-     * - isEnd == 0 -> sentence end (isSessionEnd = false)
-     * - isEnd != 0 -> session end (isSessionEnd = true)
+     *
+     * End detection logic:
+     * - Immediate switches:
+     *   - sessionId changes: immediately report previous session end (isSessionEnd=true)
+     *   - sentenceId changes (within the same session): immediately report previous sentence end (isSessionEnd=false)
+     * - Silence timeout window (200ms): if no new frame arrives in time, report end for the last payload:
+     *   - isEnd == 0 -> sentence end (isSessionEnd=false)
+     *   - isEnd != 0 -> session end (isSessionEnd=true)
      */
     fun processAudioFrame(data: ByteArray, pts: Long) {
         if (pts == 0L) {
@@ -69,7 +99,7 @@ object AudioFrameManager {
         val basePts = (pts and 0xFFFFL).toInt()
         val isSessionEnd = isEndBits != 0
 
-        val currentPayload = SentencePayload(sessionId, sentenceId, isSessionEnd)
+        val currentPayload = SentencePayload(sessionId, sentenceId, chunkId, isSessionEnd)
 
         LogUtils.d(
             TAG,
@@ -84,12 +114,18 @@ object AudioFrameManager {
             callbackOnSentenceEnd(
                 previousPayload.sessionId,
                 previousPayload.sentenceId,
+                previousPayload.chunkId,
                 true
             )
             return
         } else if (previousPayload.sentenceId != currentPayload.sentenceId) {
             LogUtils.d(TAG, "sentenceId changed: prev=$previousPayload -> curr=$currentPayload")
-            callbackOnSentenceEnd(previousPayload.sessionId, previousPayload.sentenceId, false)
+            callbackOnSentenceEnd(
+                previousPayload.sessionId,
+                previousPayload.sentenceId,
+                previousPayload.chunkId,
+                false
+            )
             return
         }
 
@@ -101,19 +137,32 @@ object AudioFrameManager {
                 TAG,
                 "onPlaybackAudioFrame finished due to timeout ${PLAYBACK_AUDIO_FRAME_TIMEOUT_MS}ms"
             )
-            // timeout means no new frame arrived within window; decide end type by last payload's isSessionEnd
-            val snapshot = mLastPayload
-            val s = snapshot ?: return@launch
-            callbackOnSentenceEnd(
-                s.sessionId,
-                s.sentenceId,
-                s.isSessionEnd
-            )
+            val snap = mLastPayload?.let {
+                SentencePayload(
+                    it.sessionId,
+                    it.sentenceId,
+                    it.chunkId,
+                    it.isSessionEnd
+                )
+            }
+            if (snap != null) {
+                callbackOnSentenceEnd(
+                    snap.sessionId,
+                    snap.sentenceId,
+                    snap.chunkId,
+                    snap.isSessionEnd
+                )
+            }
         }
     }
 
-    private fun callbackOnSentenceEnd(sessionId: Int, sentenceId: Int, isSessionEnd: Boolean) {
-        mCallback?.onSentenceEnd(sessionId, sentenceId, isSessionEnd)
+    private fun callbackOnSentenceEnd(
+        sessionId: Int,
+        sentenceId: Int,
+        chunkId: Int,
+        isSessionEnd: Boolean
+    ) {
+        mCallback?.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
         mLastPayload = null
     }
 
