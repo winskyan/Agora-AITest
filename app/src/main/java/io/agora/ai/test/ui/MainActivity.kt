@@ -191,22 +191,26 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
             LogUtils.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
             RtcManager.pushExternalAudioFrame(
                 fileBytes,
-                System.currentTimeMillis(),
-                48000, 1
+                48000, 1, true
             )
 
             mAudioFileReader = AudioFileReader(
                 applicationContext,
-                "nearin_power_48k_1ch.pcm", 48000, 1, 10,
+                "tts_out_48k_1ch.pcm", 48000, 1, 10,
+                true,
                 object : AudioFileReader.OnAudioReadListener {
-                    override fun onAudioRead(buffer: ByteArray?, timestamp: Long) {
+                    override fun onAudioRead(
+                        buffer: ByteArray?,
+                        timestamp: Long,
+                        isLastFrame: Boolean
+                    ) {
                         if (buffer != null) {
                             mAudioFileReader?.let {
                                 RtcManager.pushExternalAudioFrame(
                                     buffer,
-                                    timestamp,
                                     it.getSampleRate(),
-                                    it.getNumOfChannels()
+                                    it.getNumOfChannels(),
+                                    isLastFrame
                                 )
                             }
                         }

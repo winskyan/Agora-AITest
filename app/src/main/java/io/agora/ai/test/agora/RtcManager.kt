@@ -41,7 +41,12 @@ object RtcManager {
     private var mFrameStartTime = 0L
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
-        override fun onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean) {
+        override fun onSentenceEnd(
+            sessionId: Int,
+            sentenceId: Int,
+            chunkId: Int,
+            isSessionEnd: Boolean
+        ) {
             super.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
             LogUtils.i(
                 TAG,
@@ -410,9 +415,9 @@ object RtcManager {
 
     fun pushExternalAudioFrame(
         data: ByteArray,
-        timestamp: Long,
         sampleRate: Int,
         channels: Int,
+        isSessionEnd: Boolean
     ): Int {
         if (mRtcEngine == null) {
             LogUtils.e(
@@ -424,6 +429,7 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
+        val timestamp = AudioFrameManager.generatePtsV3(isSessionEnd, data.size)
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
