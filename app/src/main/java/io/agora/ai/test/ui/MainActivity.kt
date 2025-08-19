@@ -13,7 +13,6 @@ import io.agora.ai.test.constants.ExamplesConstants
 import io.agora.ai.test.utils.AudioFileReader
 import io.agora.ai.test.utils.KeyCenter
 import io.agora.ai.test.utils.LogUtils
-import io.agora.ai.test.utils.Utils
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import kotlinx.coroutines.CoroutineScope
@@ -186,17 +185,18 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private fun handleJoinChannelSuccess() {
         CoroutineScope(Dispatchers.IO).launch {
-            val fileBytes =
-                Utils.readAssetBytesContent(applicationContext, "tts_out_48k_1ch.pcm")
-            LogUtils.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
-            RtcManager.pushExternalAudioFrame(
-                fileBytes,
-                48000, 1, true
-            )
+//            val fileBytes =
+//                Utils.readAssetBytesContent(applicationContext, "tts_out_48k_1ch.pcm")
+//            LogUtils.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
+//            RtcManager.pushExternalAudioFrame(
+//                fileBytes,
+//                48000, 1, true
+//            )
 
+            val interval = 10 // ms
             mAudioFileReader = AudioFileReader(
                 applicationContext,
-                "tts_out_48k_1ch.pcm", 48000, 1, 10,
+                "tts_out_48k_1ch.pcm", 48000, 1, interval,
                 true,
                 object : AudioFileReader.OnAudioReadListener {
                     override fun onAudioRead(
@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                                     buffer,
                                     it.getSampleRate(),
                                     it.getNumOfChannels(),
-                                    isLastFrame
+                                    isLastFrame, interval
                                 )
                             }
                         }

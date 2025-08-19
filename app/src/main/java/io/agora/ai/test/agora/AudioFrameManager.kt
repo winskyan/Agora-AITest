@@ -18,10 +18,16 @@ object AudioFrameManager {
     private val mSingleThreadScope = CoroutineScope(mExecutor)
     private var mCallback: ICallback? = null
     private var mLastPayload: SentencePayload? = null
-    private var mSessionId4Bits: Int = 0
-    private var mChunkId24Bits: Int = 0
-    private var mSessionDuration16Bits: Int = 0
 
+    // v2-specific counters
+    private var mV2SessionId16: Int = 1
+    private var mV2ChunkId10: Int = 1
+
+    // v3-specific counters
+    private var mSessionId4Bits: Int = 1
+    private var mChunkId24Bits: Int = 1
+    private var mSessionDuration16Bits: Int = 0
+    private var mSessionBasePts16Bits: Int = 0
 
     /**
      * Callback interface to notify sentence/session end events.
@@ -72,7 +78,118 @@ object AudioFrameManager {
         mCallback = callback
     }
 
-    // No pre-registration is required anymore. Sentence/session end will be inferred from pts fields.
+    /**
+     * Generate PTS by v2 spec.
+     * Bit layout (MSB -> LSB):
+
+     * When version = 2, pts bit layout:
+     * [high 4 bits: version] | [16 bits: sessionId] | [16 bits: sentenceId] | [10 bits: chunkId] | [2 bits: isEnd] | [low 16 bits: basePts]
+     *
+     * End detection logic:
+     * - Immediate switches:
+     *   - sessionId changes: immediately report previous session end (isSessionEnd=true)
+     *   - sentenceId changes (within the same session): immediately report previous sentence end (isSessionEnd=false)
+     * - Silence timeout window (200ms): if no new frame arrives in time, report end for the last payload:
+     *   - isEnd == 0 -> sentence end (isSessionEnd=false)
+     *   - isEnd != 0 -> session end (isSessionEnd=true)
+     */
+    @Synchronized
+    fun generatePtsV2(
+        isSessionEnd: Boolean,
+        frameSize: Int,
+    ): Long {
+        val version = 2
+        val safeVersion = version and 0xF
+        val sessionId = mV2SessionId16 and 0xFFFF
+        val sentenceId = 1 // default 1
+        val chunkId = mV2ChunkId10 and 0x3FF
+        val isEndBits = if (isSessionEnd) 1 else 0
+        val basePts = 0
+
+        var pts = 0L
+        pts = pts or ((safeVersion.toLong() and 0xFL) shl 60)
+        pts = pts or ((sessionId.toLong() and 0xFFFFL) shl 44)
+        pts = pts or ((sentenceId.toLong() and 0xFFFFL) shl 28)
+        pts = pts or ((chunkId.toLong() and 0x3FFL) shl 18)
+        pts = pts or ((isEndBits.toLong() and 0x3L) shl 16)
+        pts = pts or (basePts.toLong() and 0xFFFFL)
+
+        LogUtils.d(
+            TAG,
+            "generatePtsV2 pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
+                    "sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId"
+        )
+
+        // Update counters for next call
+        if (isSessionEnd) {
+            mV2SessionId16 = if (mV2SessionId16 >= 0xFFFF) 1 else mV2SessionId16 + 1
+            mV2ChunkId10 = 1
+        } else {
+            mV2ChunkId10 = if (mV2ChunkId10 >= 0x3FF) 1 else mV2ChunkId10 + 1
+        }
+
+        return pts
+    }
+
+    /**
+     * Generate PTS by v3 spec.
+     * Bit layout (MSB -> LSB):
+     * [3 bits: version] | [4 bits: sessionId] | [24 bits: chunkId] | [16 bits: duration(ms)] | [1 bit: isSessionEnd] | [16 bits: basePts]
+     *
+     * Rules:
+     * - version defaults to 3
+     * - sessionId is internal (not passed in). When isSessionEnd == true, it increments by 1 (wraps within 4 bits 0..15) to the NEXT session
+     * - chunkId is internal 24-bit counter: starts at 1, increments by 1 each call; when isSessionEnd == true, it resets to 1 for the next session
+     * - basePts defaults to 0
+     * - duration(ms) is internally accumulated from the durations passed in each call, and only written when isSessionEnd == true (otherwise 0)
+     */
+    @Synchronized
+    fun generatePtsV3(
+        isSessionEnd: Boolean,
+        durationMs: Int,
+    ): Long {
+        val version = 3
+        val safeVersion = version and 0x7
+        val sessionId = mSessionId4Bits and 0xF
+        val chunkId = mChunkId24Bits and 0xFFFFFF
+        val safeChunkId = chunkId and 0xFFFFFF
+        mSessionDuration16Bits = (mSessionDuration16Bits + (durationMs and 0xFFFF)) and 0xFFFF
+        val safeDuration = if (isSessionEnd) mSessionDuration16Bits else 0
+        mSessionBasePts16Bits = (mSessionBasePts16Bits + (10 and 0xFFFF)) and 0xFFFF
+        val safeBasePts = mSessionBasePts16Bits
+
+        var pts = 0L
+        pts = pts or ((safeVersion.toLong() and 0x7L) shl 61)
+        pts = pts or ((sessionId.toLong() and 0xFL) shl 57)
+        pts = pts or ((safeChunkId.toLong() and 0xFFFFFFL) shl 33)
+        pts = pts or ((safeDuration.toLong() and 0xFFFFL) shl 17)
+        pts = pts or ((((if (isSessionEnd) 1 else 0).toLong()) and 0x1L) shl 16)
+        pts = pts or (safeBasePts.toLong() and 0xFFFFL)
+
+        LogUtils.d(
+            TAG,
+            "generatePtsV3 pts:$pts ${
+                String.format(
+                    "0x%016X",
+                    pts
+                )
+            } isSessionEnd:$isSessionEnd durationMs:$durationMs " +
+                    "sessionId:$sessionId chunkId:$safeChunkId duration:$safeDuration basePts:$safeBasePts"
+        )
+
+        // Update internal counters for next call
+        if (isSessionEnd) {
+            // Session ends: advance session id (wrap to 1) and reset chunk id to 1 for next session
+            mSessionId4Bits = if (mSessionId4Bits >= 0xF) 1 else mSessionId4Bits + 1
+            mChunkId24Bits = 1
+            mSessionDuration16Bits = 0
+        } else {
+            // Continue current session: increment chunk id (wrap to 1)
+            mChunkId24Bits = if (mChunkId24Bits >= 0xFFFFFF) 1 else mChunkId24Bits + 1
+        }
+
+        return pts
+    }
 
     /**
      * Process an audio frame.
@@ -181,62 +298,11 @@ object AudioFrameManager {
         mExecutor.close()
         mCallback = null
         mLastPayload = null
-        mSessionId4Bits = 0
-        mChunkId24Bits = 0
+        mSessionId4Bits = 1
+        mChunkId24Bits = 1
         mSessionDuration16Bits = 0
-    }
-
-    /**
-     * Generate PTS by v3 spec.
-     * Bit layout (MSB -> LSB):
-     * [3 bits: version] | [4 bits: sessionId] | [24 bits: chunkId] | [16 bits: sentence_duration] | [1 bit: isSessionEnd] | [16 bits: basePts]
-     *
-     * Rules:
-     * - version defaults to 3
-     * - sessionId is internal (not passed in). When isSessionEnd == true, it increments by 1 (wraps within 4 bits 0..15) for the NEXT session
-     * - chunkId is internal 24-bit counter: starts at 0, increments by 1 each call; when isSessionEnd == true, it resets to 0 for the next session
-     * - basePts defaults to 0
-     * - sentence_duration is internally computed as the sum of frame sizes in the current session, and only written when isSessionEnd == true
-     */
-    @Synchronized
-    fun generatePtsV3(
-        isSessionEnd: Boolean,
-        frameSize: Int,
-    ): Long {
-        val version = 3
-        val safeVersion = version and 0x7
-        val sessionId = mSessionId4Bits and 0xF
-        val chunkId = mChunkId24Bits and 0xFFFFFF
-        val safeChunkId = chunkId and 0xFFFFFF
-        mSessionDuration16Bits = (mSessionDuration16Bits + (frameSize and 0xFFFF)) and 0xFFFF
-        val safeSentenceDuration = if (isSessionEnd) mSessionDuration16Bits else 0
-        val safeBasePts = 0
-
-        var pts = 0L
-        pts = pts or ((safeVersion.toLong() and 0x7L) shl 61)
-        pts = pts or ((sessionId.toLong() and 0xFL) shl 57)
-        pts = pts or ((safeChunkId.toLong() and 0xFFFFFFL) shl 33)
-        pts = pts or ((safeSentenceDuration.toLong() and 0xFFFFL) shl 17)
-        pts = pts or ((((if (isSessionEnd) 1 else 0).toLong()) and 0x1L) shl 16)
-        pts = pts or (safeBasePts.toLong() and 0xFFFFL)
-
-        LogUtils.d(
-            TAG,
-            "generatePtsV3 pts:$pts isSessionEnd:$isSessionEnd frameSize:$frameSize " +
-                    "sessionId:$sessionId chunkId:$safeChunkId sentenceDuration:$safeSentenceDuration"
-        )
-
-        // Update internal counters for next call
-        if (isSessionEnd) {
-            // Session ends: advance session id and reset chunk id for next session
-            mSessionId4Bits = (mSessionId4Bits + 1) and 0xF
-            mChunkId24Bits = 0
-            mSessionDuration16Bits = 0
-        } else {
-            // Continue current session: increment chunk id
-            mChunkId24Bits = (mChunkId24Bits + 1) and 0xFFFFFF
-        }
-
-        return pts
+        mSessionBasePts16Bits = 0
+        mV2SessionId16 = 1
+        mV2ChunkId10 = 1
     }
 }

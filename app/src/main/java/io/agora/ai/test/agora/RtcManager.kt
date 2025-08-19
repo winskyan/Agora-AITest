@@ -282,7 +282,12 @@ object RtcManager {
 
                 LogUtils.d(
                     TAG,
-                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs index:$mAudioFrameIndex dataSize:${byteArray.size}"
+                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs ${
+                        String.format(
+                            "0x%016X",
+                            presentationMs
+                        )
+                    } index:$mAudioFrameIndex dataSize:${byteArray.size}"
                 )
                 mAudioFrameIndex++
 
@@ -403,6 +408,7 @@ object RtcManager {
         }
         try {
             mRtcEngine?.leaveChannel()
+            AudioFrameManager.release()
         } catch (e: Exception) {
             e.printStackTrace()
             LogUtils.e(
@@ -417,7 +423,8 @@ object RtcManager {
         data: ByteArray,
         sampleRate: Int,
         channels: Int,
-        isSessionEnd: Boolean
+        isSessionEnd: Boolean,
+        duration: Int
     ): Int {
         if (mRtcEngine == null) {
             LogUtils.e(
@@ -429,7 +436,7 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = AudioFrameManager.generatePtsV3(isSessionEnd, data.size)
+        val timestamp = AudioFrameManager.generatePtsV3(isSessionEnd, duration)
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,

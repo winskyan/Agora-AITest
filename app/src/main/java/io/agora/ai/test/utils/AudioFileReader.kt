@@ -188,12 +188,14 @@ class AudioFileReader
                         // tail smaller than 1ms, discard
                         return null
                     }
-                    val buffer = ByteArray(lastSize)
+                    val buffer = ByteArray(fullFrameSize)
                     var totalRead = 0
                     try {
-                        while (totalRead < lastSize) {
+                        // read whatever remains into a full-sized buffer; rest stays zero (silence)
+                        while (totalRead < remaining && totalRead < fullFrameSize) {
                             val read =
-                                inputStream?.read(buffer, totalRead, lastSize - totalRead) ?: -1
+                                inputStream?.read(buffer, totalRead, fullFrameSize - totalRead)
+                                    ?: -1
                             if (read <= 0) break
                             totalRead += read
                         }
@@ -201,10 +203,7 @@ class AudioFileReader
                         e.printStackTrace()
                     }
                     if (totalRead <= 0) return null
-                    return Pair(
-                        if (totalRead == lastSize) buffer else buffer.copyOf(totalRead),
-                        true
-                    )
+                    return Pair(buffer, true)
                 } else {
                     // loop playback: return normal frames; at loop end, drop remainder and only emit last frame sized to multiple of 1ms
                     val remaining = try {
@@ -249,30 +248,15 @@ class AudioFileReader
                         )
                     }
 
-                    val lastSize = (remaining / oneMsSize) * oneMsSize
+                    val lastSize = remaining // anything <= fullFrameSize is the tail of this loop
                     if (lastSize > 0) {
-                        // discard remainder before last multiple-of-1ms frame, if any
-                        val preLast = remaining - lastSize
-                        if (preLast > 0) {
-                            val drainBuf = ByteArray(preLast)
-                            var drained = 0
-                            try {
-                                while (drained < preLast) {
-                                    val read =
-                                        inputStream?.read(drainBuf, drained, preLast - drained)
-                                            ?: -1
-                                    if (read <= 0) break
-                                    drained += read
-                                }
-                            } catch (_: Throwable) {
-                            }
-                        }
-                        val buffer = ByteArray(lastSize)
+                        val buffer = ByteArray(fullFrameSize)
                         var totalRead = 0
                         try {
-                            while (totalRead < lastSize) {
+                            while (totalRead < lastSize && totalRead < fullFrameSize) {
                                 val read =
-                                    inputStream?.read(buffer, totalRead, lastSize - totalRead) ?: -1
+                                    inputStream?.read(buffer, totalRead, fullFrameSize - totalRead)
+                                        ?: -1
                                 if (read <= 0) break
                                 totalRead += read
                             }
@@ -280,24 +264,11 @@ class AudioFileReader
                             e.printStackTrace()
                         }
                         if (totalRead <= 0) continue
-                        return Pair(
-                            if (totalRead == lastSize) buffer else buffer.copyOf(totalRead),
-                            true
-                        )
+                        // buffer already zero-padded for the remaining part
+                        return Pair(buffer, true)
                     }
 
-                    // remaining < oneMsSize: drain and reopen for next loop
-                    val drainBuf = ByteArray(remaining)
-                    var drained = 0
-                    try {
-                        while (drained < remaining) {
-                            val read =
-                                inputStream?.read(drainBuf, drained, remaining - drained) ?: -1
-                            if (read <= 0) break
-                            drained += read
-                        }
-                    } catch (_: Throwable) {
-                    }
+                    // remaining == 0: reopen for next loop
                     try {
                         inputStream?.close()
                     } catch (_: IOException) {
