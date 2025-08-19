@@ -156,7 +156,6 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         runOnUiThread {
             updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid)")
             updateUI()
-            handleJoinChannelSuccess()
         }
     }
 
@@ -171,7 +170,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
         runOnUiThread {
-
+            handleJoinChannelSuccess()
         }
     }
 
@@ -193,7 +192,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 //                48000, 1, true
 //            )
 
-            val interval = 10 // ms
+            val interval = 50 // ms
             mAudioFileReader = AudioFileReader(
                 applicationContext,
                 "tts_out_48k_1ch.pcm", 48000, 1, interval,

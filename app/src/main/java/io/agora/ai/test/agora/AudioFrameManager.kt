@@ -29,6 +29,10 @@ object AudioFrameManager {
     private var mSessionDuration16Bits: Int = 0
     private var mSessionBasePts16Bits: Int = 0
 
+    // v4-specific counters
+    private var mV4SessionId18: Int = 1
+    private var mV4BasePts32: Long = 0L
+
     /**
      * Callback interface to notify sentence/session end events.
      *
@@ -183,9 +187,55 @@ object AudioFrameManager {
             mSessionId4Bits = if (mSessionId4Bits >= 0xF) 1 else mSessionId4Bits + 1
             mChunkId24Bits = 1
             mSessionDuration16Bits = 0
+            mSessionBasePts16Bits = 0
         } else {
             // Continue current session: increment chunk id (wrap to 1)
             mChunkId24Bits = if (mChunkId24Bits >= 0xFFFFFF) 1 else mChunkId24Bits + 1
+        }
+
+        return pts
+    }
+
+    /**
+     * Generate PTS by v4 spec.
+     * Bit layout (MSB -> LSB):
+     * [3 bits: version] | [18 bits: sessionId] | [10 bits: last_chunk_duration_ms] | [1 bit: isSessionEnd] | [32 bits: basePts]
+     * Rules:
+     * - version defaults to 1
+     * - sessionId is 18-bit internal counter, always increments (wraps to 1 after 0x3FFFF)
+     * - last_chunk_duration_ms: when isSessionEnd == true, set to durationMs (masked to 10 bits); otherwise 0
+     * - basePts: 32-bit rolling timestamp accumulator (adds durationMs each call, wraps at 2^32)
+     */
+    @Synchronized
+    fun generatePtsV4(
+        isSessionEnd: Boolean,
+        durationMs: Int,
+    ): Long {
+        val version = 1
+        val safeVersion = version and 0x7
+        val sessionId = mV4SessionId18 and 0x3FFFF
+        val lastChunkDuration = if (isSessionEnd) (durationMs and 0x3FF) else 0
+        val basePts32 = mV4BasePts32
+
+        var pts = 0L
+        pts = pts or ((safeVersion.toLong() and 0x7L) shl 61)
+        pts = pts or ((sessionId.toLong() and 0x3FFFFL) shl 43)
+        pts = pts or ((lastChunkDuration.toLong() and 0x3FFL) shl 33)
+        pts = pts or ((((if (isSessionEnd) 1 else 0).toLong()) and 0x1L) shl 32)
+        pts = pts or (basePts32 and 0xFFFF_FFFFL)
+
+        LogUtils.d(
+            TAG,
+            "generatePts pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
+                    "sessionId:$sessionId lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
+        )
+
+        if (isSessionEnd) {
+            // advance session id every call, wrap to 1
+            mV4SessionId18 = if (mV4SessionId18 >= 0x3FFFF) 1 else mV4SessionId18 + 1
+            mV4BasePts32 = 0L
+        } else {
+            mV4BasePts32 = (mV4BasePts32 + (durationMs.toLong() and 0xFFFF_FFFFL)) and 0xFFFF_FFFFL
         }
 
         return pts
@@ -304,5 +354,7 @@ object AudioFrameManager {
         mSessionBasePts16Bits = 0
         mV2SessionId16 = 1
         mV2ChunkId10 = 1
+        mV4SessionId18 = 1
+        mV4BasePts32 = 0L
     }
 }

@@ -64,10 +64,10 @@ APP_CERTIFICATE=你的证书密钥
 - 位分布（MSB → LSB）：
   - 3 位 `version`：固定为 3
   - 4 位 `sessionId`：内部维护，`isSessionEnd=true` 时自增并在 0..15 回绕
-  - 24 位 `chunkId`：内部维护，每次调用自增，`isSessionEnd=true` 时重置为 0
+  - 24 位 `chunkId`：内部维护，每次调用自增，`isSessionEnd=true` 时重置为 1
   - 16 位 `duration(ms)`：内部累计的会话总时长（单位 ms），仅在 `isSessionEnd=true` 时写入，否则为 0
   - 1 位 `isSessionEnd`：是否为会话结束帧
-  - 16 位 `basePts`：固定为 0
+  - 16 位 `basePts`：内部 16 位累计计数
 
 - Kotlin 用法：
 
@@ -96,6 +96,28 @@ rtcEngine.pushExternalAudioFrame(
 
 - `sessionId`/`chunkId`/`duration(ms)` 由 `AudioFrameManager` 内部自动维护并累计，最后一帧写入总时长。
 - 建议音频读取侧提供“最后一帧”标记（`isLastFrame`）。项目在循环播放模式下：若末尾不足一整帧，会用 0 填充补齐，且仅返回最后一帧并置 `isLastFrame=true`。
+
+### 生成本地推送 PTS（v4 协议）
+
+当通过自定义音轨推送本地 PCM 时，使用 `AudioFrameManager.generatePtsV4(isSessionEnd, durationMs)` 生成 v4 协议 PTS。
+
+- 位分布（MSB → LSB）：
+  - 3 位 `version`：固定为 4
+  - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
+  - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
+  - 1 位 `isSessionEnd`
+  - 32 位 `basePts`：32 位滚动累计计数，每次累加 `durationMs` 后按 `2^32` 回绕；会话结束后重置为 0
+
+- Kotlin 用法：
+
+```kotlin
+val pts = AudioFrameManager.generatePtsV4(
+    isSessionEnd = isLastFrame,
+    durationMs = deltaMs
+)
+```
+
+提示：PTS 为 64 位整型，v4 最高位用于 version，十进制可能显示为负数。建议用十六进制查看：`String.format("0x%016X", pts)` 或用无符号：`pts.toULong().toString()`。
 
 6) 监听远端音频帧并保存（可选）
 
@@ -163,6 +185,7 @@ rtcEngine.pushExternalAudioFrame(
 
 - `AudioFrameManager.generatePtsV2(isSessionEnd: Boolean, frameSize: Int)`：按 v2 协议生成 PTS（v2 位分布见上）。
 - `AudioFrameManager.generatePtsV3(isSessionEnd: Boolean, durationMs: Int)`：按 v3 协议生成 PTS，`duration(ms)` 最后一帧写入总时长。
+- `AudioFrameManager.generatePtsV4(isSessionEnd: Boolean, durationMs: Int)`：按 v4 协议生成 PTS，`last_chunk_duration_ms` 仅在最后一帧写入；`basePts` 为 32 位滚动累计计数。
 
 - `AudioFrameManager.release()`：释放内部资源与线程。
 
