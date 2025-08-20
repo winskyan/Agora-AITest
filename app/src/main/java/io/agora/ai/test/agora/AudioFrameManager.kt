@@ -150,6 +150,7 @@ object AudioFrameManager {
      * @param data raw PCM audio bytes of the current frame
      * @param pts 64-bit PTS carried with the frame. Only version = 2 is processed currently; other versions are ignored
      */
+    @Synchronized
     fun processAudioFrame(data: ByteArray, pts: Long) {
         if (pts == 0L) {
             return
