@@ -63,7 +63,7 @@ APP_CERTIFICATE=你的证书密钥
 v4 协议 PTS。
 
 - 位分布（MSB → LSB）：
-    - 3 位 `version`：固定为 4
+    - 3 位 `version`：固定为 1
     - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
     - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
     - 1 位 `isSessionEnd`
@@ -81,7 +81,7 @@ val pts = AudioFrameManager.generatePtsV4(
 - 推送示例：
 
 ```kotlin
-val pts = AudioFrameManager.generatePtsV3(isSessionEnd = isLastFrame, durationMs = deltaMs)
+val pts = AudioFrameManager.generatePtsV4(isSessionEnd = isLastFrame, durationMs = deltaMs)
 rtcEngine.pushExternalAudioFrame(
     data,
     pts,
@@ -144,9 +144,8 @@ rtcEngine.pushExternalAudioFrame(
 ### API 一览
 
 - `AudioFrameManager.init(callback: ICallback)`：初始化并注册回调
-  -
 
-  `ICallback.onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean)`
+- `ICallback.onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean)`
   ：结束回调；
     - `isSessionEnd=false`：一句话结束（同一 session 内 `sentenceId` 变化或 200ms 超时且`isEnd=0`）
     - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化或 200ms 超时且 `isEnd=1`）
@@ -190,8 +189,8 @@ if (bytes.isNotEmpty()) {
     AudioFrameManager.processAudioFrame(bytes, pts)
 }
 
-// v3：本地推送自定义音频时生成 PTS
-val ptsV3 = AudioFrameManager.generatePtsV3(isSessionEnd = isLastFrame, durationMs = deltaMs)
+// v4：本地推送自定义音频时生成 PTS
+val pts = AudioFrameManager.generatePtsV4(isSessionEnd = isLastFrame, durationMs = deltaMs)
 
 // 3) 退出或销毁时
 AudioFrameManager.release()
