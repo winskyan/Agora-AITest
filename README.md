@@ -23,12 +23,12 @@ APP_CERTIFICATE=你的证书密钥
 1) 初始化引擎 `initialize`
 
 - 创建 `RtcEngine` 并设置基础属性：
-  - 频道场景：`CHANNEL_PROFILE_LIVE_BROADCASTING`
-  - 音频 Profile/场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`
+    - 频道场景：`CHANNEL_PROFILE_LIVE_BROADCASTING`
+    - 音频 Profile/场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`
 - 关键参数（启用 Burst 及优化时延）：
-  - `{"rtc.enable_debug_log":true}` 打开调试日志
-  - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
-  - `{"che.audio.neteq.max_wait_first_decode_ms":0}`、`{"che.audio.neteq.max_wait_ms":0}`
+    - `{"rtc.enable_debug_log":true}` 打开调试日志
+    - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
+    - `{"che.audio.neteq.max_wait_first_decode_ms":0}`、`{"che.audio.neteq.max_wait_ms":0}`
 
 2) 注册音频帧观察者 `registerAudioFrame`
 
@@ -38,17 +38,17 @@ APP_CERTIFICATE=你的证书密钥
 3) 创建直通自定义音轨 `createCustomAudioTrack(AUDIO_TRACK_DIRECT)`
 
 - 通过 `AudioTrackConfig` 关闭本地回放与内置处理：
-  - `enableLocalPlayback = false`
-  - `enableAudioProcessing = false`
+    - `enableLocalPlayback = false`
+    - `enableAudioProcessing = false`
 - 记录返回的 `mCustomAudioTrackId`
 
 4) 配置并加入频道 `joinChannelEx`
 
 - 构造 `ChannelMediaOptions`：
-  - `autoSubscribeAudio = true`、`autoSubscribeVideo = false`
-  - `publishCustomAudioTrack = true`、`publishCustomAudioTrackId = mCustomAudioTrackId`
-  - `publishMicrophoneTrack = false`（禁用麦克风，改用自定义音轨）
-  - `enableAudioRecordingOrPlayout = false`
+    - `autoSubscribeAudio = true`、`autoSubscribeVideo = false`
+    - `publishCustomAudioTrack = true`、`publishCustomAudioTrackId = mCustomAudioTrackId`
+    - `publishMicrophoneTrack = false`（禁用麦克风，改用自定义音轨）
+    - `enableAudioRecordingOrPlayout = false`
 - 使用 `RtcEngineEx.joinChannelEx(token, RtcConnection(channelId, uid), options, rtcEventHandler)`
   入频道
 
@@ -57,24 +57,24 @@ APP_CERTIFICATE=你的证书密钥
 - 保证与源数据一致的参数：采样率（如 48000）、通道数（如 1）、采样字节数（2 字节/16bit）
 - 支持一次性推送整块 PCM，或使用 `AudioFileReader` 按固定帧间隔（如 10ms）循环读取并在回调中推送
 
-### 生成本地推送 PTS（v3 协议）
+### 生成本地推送 PTS（v4 协议）
 
-当通过自定义音轨推送本地 PCM 时，使用 `AudioFrameManager.generatePtsV3(isSessionEnd, durationMs)` 生成符合 v3 协议的 PTS。
+当通过自定义音轨推送本地 PCM 时，使用 `AudioFrameManager.generatePtsV4(isSessionEnd, durationMs)` 生成
+v4 协议 PTS。
 
 - 位分布（MSB → LSB）：
-  - 3 位 `version`：固定为 3
-  - 4 位 `sessionId`：内部维护，`isSessionEnd=true` 时自增并在 0..15 回绕
-  - 24 位 `chunkId`：内部维护，每次调用自增，`isSessionEnd=true` 时重置为 1
-  - 16 位 `duration(ms)`：内部累计的会话总时长（单位 ms），仅在 `isSessionEnd=true` 时写入，否则为 0
-  - 1 位 `isSessionEnd`：是否为会话结束帧
-  - 16 位 `basePts`：内部 16 位累计计数
+    - 3 位 `version`：固定为 4
+    - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
+    - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
+    - 1 位 `isSessionEnd`
+    - 32 位 `basePts`：32 位滚动累计计数，每次累加 `durationMs` 后按 `2^32` 回绕；会话结束后重置为 0
 
 - Kotlin 用法：
 
 ```kotlin
-val pts = AudioFrameManager.generatePtsV3(
+val pts = AudioFrameManager.generatePtsV4(
     isSessionEnd = isLastFrame,
-    durationMs = deltaMs // 本帧对应的时长增量（ms），内部会累计
+    durationMs = deltaMs
 )
 ```
 
@@ -92,32 +92,8 @@ rtcEngine.pushExternalAudioFrame(
 )
 ```
 
-说明：
-
-- `sessionId`/`chunkId`/`duration(ms)` 由 `AudioFrameManager` 内部自动维护并累计，最后一帧写入总时长。
-- 建议音频读取侧提供“最后一帧”标记（`isLastFrame`）。项目在循环播放模式下：若末尾不足一整帧，会用 0 填充补齐，且仅返回最后一帧并置 `isLastFrame=true`。
-
-### 生成本地推送 PTS（v4 协议）
-
-当通过自定义音轨推送本地 PCM 时，使用 `AudioFrameManager.generatePtsV4(isSessionEnd, durationMs)` 生成 v4 协议 PTS。
-
-- 位分布（MSB → LSB）：
-  - 3 位 `version`：固定为 4
-  - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
-  - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
-  - 1 位 `isSessionEnd`
-  - 32 位 `basePts`：32 位滚动累计计数，每次累加 `durationMs` 后按 `2^32` 回绕；会话结束后重置为 0
-
-- Kotlin 用法：
-
-```kotlin
-val pts = AudioFrameManager.generatePtsV4(
-    isSessionEnd = isLastFrame,
-    durationMs = deltaMs
-)
-```
-
-提示：PTS 为 64 位整型，v4 最高位用于 version，十进制可能显示为负数。建议用十六进制查看：`String.format("0x%016X", pts)` 或用无符号：`pts.toULong().toString()`。
+提示：PTS 为 64 位整型，v4 最高位用于 version，十进制可能显示为负数。建议用十六进制查看：
+`String.format("0x%016X", pts)` 或用无符号：`pts.toULong().toString()`。
 
 6) 监听远端音频帧并保存（可选）
 
@@ -156,16 +132,14 @@ val pts = AudioFrameManager.generatePtsV4(
 `isEnd` | 低 16 位 `basePts`。
 
 - **工作机制（简述）**：
-  - 直接解析 `pts` 位域获取 `sessionId`、`sentenceId`、`isEnd`；每条句子的 `isEnd` 在该句内是固定值，
-    `isEnd=1` 表示该句是本轮最后一句。
-  - 结束判定（基于静默超时）：
-    - 若 `isEnd=0`，超过 200ms 未收到下一帧，则认为该 `sentenceId` 对应的一句话结束（
-      `isSessionEnd=false`）。
-    - 若 `isEnd=1`，超过 200ms 未收到下一帧，则认为该 `sessionId` 对应的一轮对话结束（
-      `isSessionEnd=true`）。
+    - 直接解析 `pts` 位域获取 `sessionId`、`sentenceId`、`isEnd`；每条句子的 `isEnd` 在该句内是固定值，
+      `isEnd=1` 表示该句是本轮最后一句。
+    - 结束判定（基于静默超时）：
+        - 若 超过 500ms 未收到下一帧，则认为该 `sessionId` 对应的一轮对话结束（
+          `isSessionEnd=true`）。
 
 - **常量（可按需调整源码内取值）**：
-  - `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS = 200`：静默超时阈值（毫秒）。
+    - `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS = 500`：静默超时阈值（毫秒）。
 
 ### API 一览
 
@@ -174,18 +148,21 @@ val pts = AudioFrameManager.generatePtsV4(
 
   `ICallback.onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean)`
   ：结束回调；
-  - `isSessionEnd=false`：一句话结束（同一 session 内 `sentenceId` 变化或 200ms 超时且`isEnd=0`）
-  - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化或 200ms 超时且 `isEnd=1`）
+    - `isSessionEnd=false`：一句话结束（同一 session 内 `sentenceId` 变化或 200ms 超时且`isEnd=0`）
+    - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化或 200ms 超时且 `isEnd=1`）
 
 - `AudioFrameManager.processAudioFrame(data: ByteArray, pts: Long)`：输入远端 PCM 帧及其
   PTS，用于进行结束判定。
-  - 当 `version=2`：高 4 位 `version` | 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` |
-    2 位 `isEnd` | 低 16 位 `basePts`。
-  - 其他 `version` 将被忽略（当前实现仅处理 `version=2`）。
+    - 当 `version=2`：高 4 位 `version` | 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` |
+      2 位 `isEnd` | 低 16 位 `basePts`。
+    - 其他 `version` 将被忽略（当前实现仅处理 `version=2`）。
 
-- `AudioFrameManager.generatePtsV2(isSessionEnd: Boolean, frameSize: Int)`：按 v2 协议生成 PTS（v2 位分布见上）。
-- `AudioFrameManager.generatePtsV3(isSessionEnd: Boolean, durationMs: Int)`：按 v3 协议生成 PTS，`duration(ms)` 最后一帧写入总时长。
-- `AudioFrameManager.generatePtsV4(isSessionEnd: Boolean, durationMs: Int)`：按 v4 协议生成 PTS，`last_chunk_duration_ms` 仅在最后一帧写入；`basePts` 为 32 位滚动累计计数。
+- `AudioFrameManager.generatePtsV2(isSessionEnd: Boolean, frameSize: Int)`：按 v2 协议生成 PTS（v2
+  位分布见上）。
+- `AudioFrameManager.generatePtsV3(isSessionEnd: Boolean, durationMs: Int)`：按 v3 协议生成 PTS，
+  `duration(ms)` 最后一帧写入总时长。
+- `AudioFrameManager.generatePtsV4(isSessionEnd: Boolean, durationMs: Int)`：按 v4 协议生成 PTS，
+  `last_chunk_duration_ms` 仅在最后一帧写入；`basePts` 为 32 位滚动累计计数。
 
 - `AudioFrameManager.release()`：释放内部资源与线程。
 
@@ -224,7 +201,7 @@ AudioFrameManager.release()
 
 - 确保 `pts` 正确按位域编码；乱序或回退的帧建议丢弃。
 - 如需更灵敏/更稳健的结束判定，可按业务场景调整：
-  - 调小/调大 `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS` 以平衡响应速度与稳健性。
+    - 调小/调大 `PLAYBACK_AUDIO_FRAME_TIMEOUT_MS` 以平衡响应速度与稳健性。
 
 ### 额外行为说明
 
