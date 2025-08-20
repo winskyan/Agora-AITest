@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 
 object AudioFrameManager {
     private const val TAG = "${ExamplesConstants.TAG}-AudioFrameManager"
-    private const val PLAYBACK_AUDIO_FRAME_TIMEOUT_MS: Long = 200 // ms
+    private const val PLAYBACK_AUDIO_FRAME_TIMEOUT_MS: Long = 500 // ms
 
     private var mAudioFrameFinishJob: Job? = null
     private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -320,7 +320,7 @@ object AudioFrameManager {
                     snap.sessionId,
                     snap.sentenceId,
                     snap.chunkId,
-                    snap.isSessionEnd
+                    true
                 )
             }
         }
