@@ -86,19 +86,25 @@ object AudioFrameManager {
      * - sessionId is an 18-bit internal counter, always increments (wraps to 1 after 0x3FFFF)
      * - last_chunk_duration_ms: when {@code isSessionEnd == true}, set to {@code durationMs & 0x3FF}; otherwise 0
      * - basePts: 32-bit rolling timestamp accumulator (adds {@code durationMs} each call, wraps at 2^32)
+     * - durationMs is computed from PCM length: {@code durationMs = data.size / ((sampleRate * channels * 2) / 1000)} for 16-bit PCM
      *
+     * @param data raw PCM bytes of the current frame (16-bit PCM)
+     * @param sampleRate sample rate in Hz (e.g., 48000)
+     * @param channels number of audio channels (e.g., 1 for mono)
      * @param isSessionEnd whether the current frame marks the end of the whole session
-     * @param durationMs duration of the current frame in milliseconds
      * @return 64-bit PTS encoded
      */
     @Synchronized
     fun generatePts(
-        isSessionEnd: Boolean,
-        durationMs: Int,
+        data: ByteArray,
+        sampleRate: Int,
+        channels: Int,
+        isSessionEnd: Boolean
     ): Long {
         val version = 1
         val safeVersion = version and 0x7
         val sessionId = mSessionId18 and 0x3FFFF
+        val durationMs = data.size / ((sampleRate * channels * 2) / 1000) // 16-bit PCM
         val lastChunkDuration = if (isSessionEnd) (durationMs and 0x3FF) else 0
         val basePts32 = mBasePts32
 
@@ -112,7 +118,7 @@ object AudioFrameManager {
         LogUtils.d(
             TAG,
             "generatePts pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
-                    "sessionId:$sessionId lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
+                    "sessionId:$sessionId durationMs:${durationMs} lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
         )
 
         if (isSessionEnd) {

@@ -209,7 +209,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                                     buffer,
                                     it.getSampleRate(),
                                     it.getNumOfChannels(),
-                                    isLastFrame, interval
+                                    isLastFrame
                                 )
                             }
                         }

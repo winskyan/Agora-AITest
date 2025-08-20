@@ -423,8 +423,7 @@ object RtcManager {
         data: ByteArray,
         sampleRate: Int,
         channels: Int,
-        isSessionEnd: Boolean,
-        duration: Int
+        isSessionEnd: Boolean
     ): Int {
         if (mRtcEngine == null) {
             LogUtils.e(
@@ -436,7 +435,7 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = AudioFrameManager.generatePts(isSessionEnd, duration)
+        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
