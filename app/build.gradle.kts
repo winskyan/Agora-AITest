@@ -39,16 +39,6 @@ android {
         )
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
-
     signingConfigs {
         create("release") {
             keyAlias = "key0"
@@ -57,6 +47,19 @@ android {
             storePassword = "123456"
         }
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+
 
     applicationVariants.all {
         outputs.all {
@@ -82,6 +85,11 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     ndkVersion = "28.2.13676358"

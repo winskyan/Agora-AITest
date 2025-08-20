@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">API Example</string>
+    <string name="app_name">AI Main</string>
     <string name="join">Join</string>
     <string name="leave">Leave</string>
     <string name="enable_video">Enable Video</string>
