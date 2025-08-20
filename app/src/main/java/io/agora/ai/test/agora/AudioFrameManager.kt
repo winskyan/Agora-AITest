@@ -11,7 +11,8 @@ import java.util.concurrent.Executors
 
 object AudioFrameManager {
     private const val TAG = "${ExamplesConstants.TAG}-AudioFrameManager"
-    private const val PLAYBACK_AUDIO_FRAME_TIMEOUT_MS: Long = 500 // ms
+    private const val PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS: Long = 500 // ms
+    private const val PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS: Long = 200 // ms
 
     private var mAudioFrameFinishJob: Job? = null
     private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -161,7 +162,7 @@ object AudioFrameManager {
 
         LogUtils.d(
             TAG,
-            "processAudioFrame version:${version} currentPayload:${currentPayload} chunkId:$chunkId basePts:$basePts"
+            "processAudioFrame version:${version} currentPayload:${currentPayload} basePts:$basePts"
         )
 
         val previousPayload = mLastPayload
@@ -190,10 +191,12 @@ object AudioFrameManager {
         mLastPayload = currentPayload
 
         mAudioFrameFinishJob = mSingleThreadScope.launch {
-            delay(PLAYBACK_AUDIO_FRAME_TIMEOUT_MS)
+            val delayTime =
+                if (mLastPayload?.isSessionEnd == true) PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS else PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS
+            delay(delayTime)
             LogUtils.d(
                 TAG,
-                "onPlaybackAudioFrame finished due to timeout ${PLAYBACK_AUDIO_FRAME_TIMEOUT_MS}ms"
+                "onPlaybackAudioFrame finished due to timeout ${delayTime}ms"
             )
             val snap = mLastPayload?.let {
                 SentencePayload(
@@ -220,6 +223,10 @@ object AudioFrameManager {
         chunkId: Int,
         isSessionEnd: Boolean
     ) {
+        LogUtils.d(
+            TAG,
+            "callbackOnSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
+        )
         mCallback?.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
         mLastPayload = null
     }
