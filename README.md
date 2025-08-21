@@ -23,12 +23,12 @@ APP_CERTIFICATE=你的证书密钥
 1) 初始化引擎 `initialize`
 
 - 创建 `RtcEngine` 并设置基础属性：
-    - 频道场景：`CHANNEL_PROFILE_LIVE_BROADCASTING`
-    - 音频 Profile/场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`
+  - 频道场景：`CHANNEL_PROFILE_LIVE_BROADCASTING`
+  - 音频 Profile/场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`
 - 关键参数（启用 Burst 及优化时延）：
-    - `{"rtc.enable_debug_log":true}` 打开调试日志
-    - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
-    - `{"che.audio.neteq.max_wait_first_decode_ms":0}`、`{"che.audio.neteq.max_wait_ms":0}`
+  - `{"rtc.enable_debug_log":true}` 打开调试日志
+  - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
+  - `{"che.audio.neteq.max_wait_first_decode_ms":0}`、`{"che.audio.neteq.max_wait_ms":0}`
 
 2) 注册音频帧观察者 `registerAudioFrame`
 
@@ -38,17 +38,17 @@ APP_CERTIFICATE=你的证书密钥
 3) 创建直通自定义音轨 `createCustomAudioTrack(AUDIO_TRACK_DIRECT)`
 
 - 通过 `AudioTrackConfig` 关闭本地回放与内置处理：
-    - `enableLocalPlayback = false`
-    - `enableAudioProcessing = false`
+  - `enableLocalPlayback = false`
+  - `enableAudioProcessing = false`
 - 记录返回的 `mCustomAudioTrackId`
 
 4) 配置并加入频道 `joinChannelEx`
 
 - 构造 `ChannelMediaOptions`：
-    - `autoSubscribeAudio = true`、`autoSubscribeVideo = false`
-    - `publishCustomAudioTrack = true`、`publishCustomAudioTrackId = mCustomAudioTrackId`
-    - `publishMicrophoneTrack = false`（禁用麦克风，改用自定义音轨）
-    - `enableAudioRecordingOrPlayout = false`
+  - `autoSubscribeAudio = true`、`autoSubscribeVideo = false`
+  - `publishCustomAudioTrack = true`、`publishCustomAudioTrackId = mCustomAudioTrackId`
+  - `publishMicrophoneTrack = false`（禁用麦克风，改用自定义音轨）
+  - `enableAudioRecordingOrPlayout = false`
 - 使用 `RtcEngineEx.joinChannelEx(token, RtcConnection(channelId, uid), options, rtcEventHandler)`
   入频道
 
@@ -64,17 +64,17 @@ APP_CERTIFICATE=你的证书密钥
 PTS。
 
 - 参数说明：
-    - `data`：当前帧的 PCM 字节数组（16-bit PCM）
-    - `sampleRate`：采样率（Hz，如 48000）
-    - `channels`：通道数（如 1 表示单声道）
-    - `isSessionEnd`：是否为当前会话的最后一帧
+  - `data`：当前帧的 PCM 字节数组（16-bit PCM）
+  - `sampleRate`：采样率（Hz，如 48000）
+  - `channels`：通道数（如 1 表示单声道）
+  - `isSessionEnd`：是否为当前会话的最后一帧
 
 - 位分布（MSB → LSB）：
-    - 3 位 `version`：固定为 1
-    - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
-    - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
-    - 1 位 `isSessionEnd`
-    - 32 位 `basePts`：32 位滚动累计计数，每次累加 `durationMs` 后按 `2^32` 回绕；会话结束后重置为 0
+  - 3 位 `version`：固定为 1
+  - 18 位 `sessionId`：内部计数，每次调用自增，超过 `0x3FFFF` 回到 1
+  - 10 位 `last_chunk_duration_ms`：仅当 `isSessionEnd=true` 时写入 `durationMs & 0x3FF`，其余为 0
+  - 1 位 `isSessionEnd`
+  - 32 位 `basePts`：32 位滚动累计计数，每次累加 `durationMs` 后按 `2^32` 回绕；会话结束后重置为 0
 
 - 推送示例：
 
@@ -115,8 +115,8 @@ rtcEngine.pushExternalAudioFrame(
 ## AudioFrameManager 使用说明
 
 `AudioFrameManager` 用于“句级/轮次级”跟踪远端播放音频帧的结束时刻（TTS/AI
-对话等场景）。新版实现不再需要业务侧进行句元登记，而是直接从 `processAudioFrame` 的 `pts` 位域中解析（当
-`version=2` 时）。
+对话等场景）。新版实现不再需要业务侧进行句元登记，而是直接按照 `generatePts` 的位域协议在
+`processAudioFrame` 中解析（当 `version=1` 时）。
 
 术语说明：
 
@@ -125,48 +125,47 @@ rtcEngine.pushExternalAudioFrame(
 - chunk：句子中的一段音频分片（子块），属于某个 sentence
 - isSessionEnd：是否为该 session 的结束标记
 
-当 `version=2` 时，`pts` 位分布如下：
-高 4 位 `version`（不超过 0x7）| 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` | 2 位
-`isEnd` | 低 16 位 `basePts`。
+当 `version=1` 时，`pts` 位分布如下（与 `generatePts` 一致）：
+3 位 `version` | 18 位 `sessionId` | 10 位 `last_chunk_duration_ms` | 1 位 `isSessionEnd` | 32 位 `basePts`。
 
 - **工作机制（简述）**：
-    - 直接解析 `pts` 位域获取 `sessionId`、`sentenceId`、`isEnd`；每条句子的 `isEnd` 在该句内是固定值，
-      `isEnd=1` 表示该句是本轮最后一句。
-    - 结束判定（基于静默超时）：
-        - 若最后一帧 `isEnd=1`，使用 200ms 静默阈值；否则使用 500ms 静默阈值
-        - 超时后认为该 `sessionId` 对应的一轮对话结束（
-          `isSessionEnd=true`）。
+  - 解析 `pts` 位域获取 `sessionId`、`last_chunk_duration_ms` 与 `isSessionEnd`。
+  - 若 `sessionId` 发生变化，立即回调上一轮会话结束（`isSessionEnd=true`）。
+  - 若 `isSessionEnd=true` 且 `last_chunk_duration_ms>0`，累计已接收 PCM 时长，达到该时长后立即回调会话结束。
+  - 静默超时：若 `isSessionEnd=true` 使用 200ms 超时；否则使用 500ms 超时。超时后回调会话结束。
+  - 当前实现中 `sentenceId` 与 `chunkId` 固定为 1，仅作为回调占位。
 
 - **常量（可按需调整源码内取值）**：
-    - `PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS = 500`：普通帧静默超时上限（毫秒）。
-    - `PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS = 200`：标记为会话最后一帧（`isEnd=1`）时使用的更短静默超时（毫秒）。
+  - `PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS = 500`：普通帧静默超时上限（毫秒）。
+  - `PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS = 200`：标记为会话最后一帧（`isSessionEnd=true`）时使用的更短静默超时（毫秒）。
 
 ### API 一览
 
 - `AudioFrameManager.init(callback: ICallback)`：初始化并注册回调
-    - 参数：
-        - `callback`：收到“句末/轮末”事件时的回调实例
+  - 参数：
+    - `callback`：收到“句末/轮末”事件时的回调实例
 
 - `ICallback.onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean)`
   ：结束回调；
-    - `isSessionEnd=false`：一句话结束（同一 `sessionId` 内 `sentenceId` 变化时立即回调）。
-    - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化时立即回调，或静默超时后回调；静默阈值：最后一帧
+  - `isSessionEnd=false`：一句话结束（同一 `sessionId` 内 `sentenceId` 变化时立即回调）。
+  - `isSessionEnd=true`：一轮会话结束（`sessionId` 变化时立即回调，或静默超时后回调；静默阈值：最后一帧
       `isEnd=1` 时 200ms，否则 500ms）。
 
-- `AudioFrameManager.processAudioFrame(data: ByteArray, pts: Long)`：输入远端 PCM 帧及其
-  PTS，用于进行结束判定。
-    - 参数：
-        - `data`：当前帧的 PCM 字节数组
-        - `pts`：当前帧携带的 64 位 PTS；当 `version=2` 时按位域解析（其他版本忽略）
-    - 当 `version=2`：高 4 位 `version` | 16 位 `sessionId` | 16 位 `sentenceId` | 10 位 `chunkId` |
-      2 位 `isEnd` | 低 16 位 `basePts`。
-    - 其他 `version` 将被忽略（当前实现仅处理 `version=2`）。
+- `AudioFrameManager.processAudioFrame(data: ByteArray, sampleRate: Int, channels: Int, pts: Long)`：
+  输入远端 PCM 帧及其 PTS，用于进行结束判定。
+  - 参数：
+    - `data`：当前帧的 PCM 字节数组
+    - `sampleRate`：采样率（Hz）
+    - `channels`：通道数
+    - `pts`：当前帧携带的 64 位 PTS；当 `version=1` 时按位域解析（与 `generatePts` 一致）
+  - 当 `version=1`：3 位 `version` | 18 位 `sessionId` | 10 位 `last_chunk_duration_ms` | 1 位 `isSessionEnd` | 32 位 `basePts`。
 
 -
 
 `AudioFrameManager.generatePts(data: ByteArray, sampleRate: Int, channels: Int, isSessionEnd: Boolean)`
-：生成 PTS（遵循 v4 位分布），
+：生成 PTS（遵循 v1 位分布），
 `last_chunk_duration_ms` 仅在最后一帧写入；`basePts` 为 32 位滚动累计计数。
+
 - 参数：
 - `data`：当前帧 PCM 字节数组（16-bit PCM）
 - `sampleRate`：采样率（Hz）
@@ -200,7 +199,7 @@ buffer?.rewind()
 val bytes = ByteArray(buffer?.remaining() ?: 0)
 buffer?.get(bytes)
 if (bytes.isNotEmpty()) {
-    AudioFrameManager.processAudioFrame(bytes, pts)
+    AudioFrameManager.processAudioFrame(bytes, samplesPerSec, channels, pts)
 }
 
 // 本地推送自定义音频时生成 PTS
@@ -214,16 +213,16 @@ AudioFrameManager.release()
 
 - 确保 `pts` 正确按位域编码；乱序或回退的帧建议丢弃。
 - 如需更灵敏/更稳健的结束判定，可按业务场景调整：
-    - 合理调整 `PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS` 与 `PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS`
+  - 合理调整 `PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS` 与 `PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS`
       以平衡响应速度与稳健性。
 
 ### 额外行为说明
 
 - 会话切换（`sessionId` 变化）：立即回调上一个会话的结束（`isSessionEnd=true`），随后开始追踪新会话。
-- 句子切换（同一 `sessionId` 下 `sentenceId` 变化）：立即回调上一句结束（`isSessionEnd=false`），随后开始追踪新句。
+- 句子切换（同一 `sessionId` 下 `sentenceId` 变化）：立即回调上一句结束（`isSessionEnd=false`）。当前实现中 `sentenceId` 固定为 1，此分支不会触发。
 
 与本项目的关系：
 
 - 已在 `RtcManager.initialize` 中调用 `AudioFrameManager.init(...)`
-- 已在 `onPlaybackAudioFrameBeforeMixing(...)` 中调用 `processAudioFrame(data, pts)`
+- 已在 `onPlaybackAudioFrameBeforeMixing(...)` 中调用 `processAudioFrame(data, samplesPerSec, channels, pts)`
 - 已在 `RtcManager.destroy` 中调用 `AudioFrameManager.release()`

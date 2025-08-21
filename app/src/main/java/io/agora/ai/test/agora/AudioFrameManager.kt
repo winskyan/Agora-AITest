@@ -18,7 +18,11 @@ object AudioFrameManager {
     private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val mSingleThreadScope = CoroutineScope(mExecutor)
     private var mCallback: ICallback? = null
+
     private var mLastPayload: SentencePayload? = null
+    private var mLastChunkAccumulatedDurationMs: Int = 0
+    private var mLastChunkFrameIndex: Int = 1
+    private var mLastSessionEndId: Int = 0
 
     private var mSessionId18: Int = 1
     private var mBasePts32: Long = 0L
@@ -56,7 +60,8 @@ object AudioFrameManager {
         val sessionId: Int,
         val sentenceId: Int,
         val chunkId: Int,
-        val isSessionEnd: Boolean
+        val isSessionEnd: Boolean,
+        val lastChunkDurationMs: Int = 0
     )
 
     /**
@@ -133,59 +138,94 @@ object AudioFrameManager {
     }
 
     /**
-     * Process an audio frame.
+     * Process one remote playback audio frame and perform end-of-session detection.
      *
-     * When {@code version = 2}, PTS bit layout:
-     * [high 4 bits: version] | [16 bits: sessionId] | [16 bits: sentenceId] |
-     * [10 bits: chunkId] | [2 bits: isEnd] | [low 16 bits: basePts]
+     * PTS bit layout for processAudioFrame (MSB -> LSB):
+     * [3 bits: version] | [12 bits: sessionId] | [16 bits: last_chunk_duration_ms] |
+     * [1 bit: isSessionEnd] | [32 bits: basePts]
      *
-     * End detection logic:
-     * - Immediate switches:
-     *   - sessionId changes: immediately report previous session end (isSessionEnd = true)
-     *   - sentenceId changes (same session): immediately report previous sentence end (isSessionEnd = false)
-     * - Silence timeout window (500ms): if no new frame arrives in time, report end for the last payload:
-     *   - isEnd == 0 -> sentence end (isSessionEnd = false)
-     *   - isEnd != 0 -> session end (isSessionEnd = true)
+     * Behavior:
+     * - Session switch: when sessionId changes, immediately report the previous session end (isSessionEnd = true).
+     * - Duration guard: if isSessionEnd == true and last_chunk_duration_ms > 0, accumulate the received
+     *   PCM duration until reaching last_chunk_duration_ms, then report session end immediately.
+     * - Silence timeout: schedule a timeout after each frame; use 200ms when isSessionEnd == true,
+     *   otherwise 500ms. On timeout, report session end for the last payload.
+     * - sentenceId and chunkId are fixed to 1 in the current implementation and only act as placeholders for callback.
      *
-     * @param data raw PCM audio bytes of the current frame
-     * @param pts 64-bit PTS carried with the frame. Only version = 2 is processed currently; other versions are ignored
+     * @param data raw PCM audio bytes of the current frame (16-bit PCM)
+     * @param sampleRate sample rate in Hz
+     * @param channels number of audio channels
+     * @param pts 64-bit PTS carried with the frame, parsed with the processAudioFrame protocol above
      */
     @Synchronized
-    fun processAudioFrame(data: ByteArray, pts: Long) {
+    fun processAudioFrame(
+        data: ByteArray, sampleRate: Int, channels: Int, pts: Long
+    ) {
         if (pts == 0L) {
             return
         }
         mAudioFrameFinishJob?.cancel()
 
-        val version = ((pts ushr 60) and 0xFL).toInt()
-        val sessionId = ((pts ushr 44) and 0xFFFFL).toInt()
-        val sentenceId = ((pts ushr 28) and 0xFFFFL).toInt()
-        val chunkId = ((pts ushr 18) and 0x3FFL).toInt()
-        val isEndBits = ((pts ushr 16) and 0x3L).toInt()
-        val basePts = (pts and 0xFFFFL).toInt()
-        val isSessionEnd = isEndBits != 0
+        // Parse according to new layout: 3|12|16|1|32
+        val version = ((pts ushr 61) and 0x7L).toInt()
+        val sessionId = ((pts ushr 49) and 0xFFFL).toInt()
+        val lastChunkDurationMs = ((pts ushr 33) and 0xFFFFL).toInt()
+        val isSessionEnd = (((pts ushr 32) and 0x1L) != 0L)
+        val basePts = (pts and 0xFFFF_FFFFL).toInt()
 
-        val currentPayload = SentencePayload(sessionId, sentenceId, chunkId, isSessionEnd)
+        // Default values as requested
+        val sentenceId = 1
+        val chunkId = 1
+
+        val durationMs = data.size / ((sampleRate * channels * 2) / 1000)
+
+        val currentPayload = SentencePayload(
+            sessionId = sessionId,
+            sentenceId = sentenceId,
+            chunkId = chunkId,
+            isSessionEnd = isSessionEnd,
+            lastChunkDurationMs = lastChunkDurationMs
+        )
 
         LogUtils.d(
             TAG,
-            "processAudioFrame version:${version} currentPayload:${currentPayload} basePts:$basePts"
+            "processAudioFrame pts:$pts ${
+                String.format(
+                    "0x%016X",
+                    pts
+                )
+            } durationMs:$durationMs sampleRate:$sampleRate channels:$channels version:${version} currentPayload:${currentPayload}"
         )
 
         val previousPayload = mLastPayload
-        if (previousPayload == null) {
-            LogUtils.d(TAG, "first payload: $currentPayload")
-        } else if (previousPayload.sessionId != currentPayload.sessionId) {
-            LogUtils.d(TAG, "payload changed: prev=$previousPayload -> curr=$currentPayload")
+        if (previousPayload != null && previousPayload.sessionId != currentPayload.sessionId) {
+            LogUtils.d(TAG, "sessionId changed: prev=$previousPayload")
             callbackOnSentenceEnd(
                 previousPayload.sessionId,
                 previousPayload.sentenceId,
                 previousPayload.chunkId,
                 true
             )
-            return
-        } else if (previousPayload.sentenceId != currentPayload.sentenceId) {
-            LogUtils.d(TAG, "sentenceId changed: prev=$previousPayload -> curr=$currentPayload")
+            // do not return here; start tracking the new session immediately
+        } else if (currentPayload.isSessionEnd && currentPayload.lastChunkDurationMs != 0) {
+            LogUtils.d(
+                TAG,
+                "currentPayload.isSessionEnd true mLastChunkFrameIndex：$mLastChunkFrameIndex"
+            )
+            mLastChunkAccumulatedDurationMs += durationMs
+            mLastChunkFrameIndex++
+            if (mLastChunkAccumulatedDurationMs >= currentPayload.lastChunkDurationMs) {
+                // reached the declared duration, report session end
+                callbackOnSentenceEnd(
+                    currentPayload.sessionId,
+                    currentPayload.sentenceId,
+                    currentPayload.chunkId,
+                    true
+                )
+                return
+            }
+        } else if (previousPayload != null && previousPayload.sentenceId != currentPayload.sentenceId) {
+            LogUtils.d(TAG, "sentenceId changed: prev=$previousPayload")
             callbackOnSentenceEnd(
                 previousPayload.sessionId,
                 previousPayload.sentenceId,
@@ -224,6 +264,7 @@ object AudioFrameManager {
         }
     }
 
+    @Synchronized
     private fun callbackOnSentenceEnd(
         sessionId: Int,
         sentenceId: Int,
@@ -234,8 +275,20 @@ object AudioFrameManager {
             TAG,
             "callbackOnSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
         )
+        if (isSessionEnd && sessionId == mLastSessionEndId) {
+            LogUtils.d(
+                TAG,
+                "callbackOnSentenceEnd: sessionId $sessionId is already processed, skipping"
+            )
+            return
+        }
         mCallback?.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
-        mLastPayload = null
+        if (isSessionEnd) {
+            mLastPayload = null
+            mLastChunkAccumulatedDurationMs = 0
+            mLastChunkFrameIndex = 1
+            mLastSessionEndId = sessionId
+        }
     }
 
     /**
@@ -248,6 +301,9 @@ object AudioFrameManager {
         mExecutor.close()
         mCallback = null
         mLastPayload = null
+        mLastChunkAccumulatedDurationMs = 0
+        mLastChunkFrameIndex = 1
+        mLastSessionEndId = 0
         mSessionId18 = 1
         mBasePts32 = 0L
     }

@@ -280,15 +280,15 @@ object RtcManager {
                     mFrameStartTime = System.currentTimeMillis()
                 }
 
-                LogUtils.d(
-                    TAG,
-                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs ${
-                        String.format(
-                            "0x%016X",
-                            presentationMs
-                        )
-                    } index:$mAudioFrameIndex dataSize:${byteArray.size}"
-                )
+//                LogUtils.d(
+//                    TAG,
+//                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid bytesPerSample:$bytesPerSample channels:$channels samplesPerSec:$samplesPerSec renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs ${
+//                        String.format(
+//                            "0x%016X",
+//                            presentationMs
+//                        )
+//                    } index:$mAudioFrameIndex dataSize:${byteArray.size}"
+//                )
                 mAudioFrameIndex++
 
                 if (mAudioFrameIndex % 50 == 0) {
@@ -302,7 +302,12 @@ object RtcManager {
                 if (byteArray.isEmpty()) {
                     return true
                 }
-                AudioFrameManager.processAudioFrame(byteArray, presentationMs)
+                AudioFrameManager.processAudioFrame(
+                    byteArray,
+                    samplesPerSec,
+                    channels,
+                    presentationMs
+                )
                 saveAudioFrame(byteArray)
                 return true
             }
@@ -435,7 +440,7 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val timestamp = System.currentTimeMillis()//AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
