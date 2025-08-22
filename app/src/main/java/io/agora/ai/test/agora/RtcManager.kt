@@ -44,13 +44,12 @@ object RtcManager {
         override fun onSentenceEnd(
             sessionId: Int,
             sentenceId: Int,
-            chunkId: Int,
             isSessionEnd: Boolean
         ) {
-            super.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
+            super.onSentenceEnd(sessionId, sentenceId, isSessionEnd)
             LogUtils.i(
                 TAG,
-                "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
+                "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId isSessionEnd:$isSessionEnd"
             )
             if (isSessionEnd) {
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
@@ -107,7 +106,7 @@ object RtcManager {
 
         mRtcEventCallback = eventCallback
 
-        mAudioFileName = context.externalCacheDir?.absolutePath + "/audio_"
+        mAudioFileName = LogUtils.getLogDir().path + "/audio_"
         LogUtils.d(TAG, "mAudioFileName:$mAudioFileName")
 
         try {
@@ -122,7 +121,7 @@ object RtcManager {
             val logConfig = LogConfig()
             logConfig.level = Constants.LOG_LEVEL_INFO
             try {
-                val agoraLogFile = java.io.File(LogUtils.getLogDir(), "agora_rtc.log")
+                val agoraLogFile = java.io.File(LogUtils.getLogDir(), "agora_sdk.log")
                 logConfig.filePath = agoraLogFile.absolutePath
                 logConfig.fileSizeInKB = 20480
                 LogUtils.d(TAG, "Agora log file: ${agoraLogFile.absolutePath}")
@@ -440,7 +439,8 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = System.currentTimeMillis()//AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val timestamp =
+            System.currentTimeMillis()//AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
