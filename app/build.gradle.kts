@@ -14,11 +14,11 @@ if (localPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "io.agora.ai.burst_test"
+    namespace = "io.agora.ai.gateway_sdk"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "io.agora.ai.burst_test"
+        applicationId = "io.agora.ai.gateway_sdk"
         minSdk = 23
         targetSdk = 34
         versionCode = 1

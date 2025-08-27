@@ -5,8 +5,8 @@ import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lxj.xpopup.XPopup
-import io.agora.ai.burst_test.R
-import io.agora.ai.burst_test.databinding.ActivityMainBinding
+import io.agora.ai.gateway_sdk.R
+import io.agora.ai.gateway_sdk.databinding.ActivityMainBinding
 import io.agora.ai.test.agora.IRtcEventCallback
 import io.agora.ai.test.agora.RtcManager
 import io.agora.ai.test.constants.ExamplesConstants
@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "wei1000"
+    private var mChannelName = "testGateway"
     private var mJoinSuccess = false
 
     private var mAudioFileReader: AudioFileReader? = null
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
         runOnUiThread {
-            handleJoinChannelSuccess()
+            //handleJoinChannelSuccess()
         }
     }
 

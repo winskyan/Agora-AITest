@@ -1,6 +1,6 @@
 package io.agora.ai.test.utils
 
-import io.agora.ai.burst_test.BuildConfig
+import io.agora.ai.gateway_sdk.BuildConfig
 import io.agora.media.RtcTokenBuilder
 import io.agora.rtm.RtmTokenBuilder
 import io.agora.rtm.RtmTokenBuilder2
