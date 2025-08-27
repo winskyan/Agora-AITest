@@ -37,4 +37,8 @@ interface IRtcEventCallback {
     fun onPlaybackAudioFrameFinished() {
 
     }
+
+    fun onPushExternalAudioFrameStart() {
+
+    }
 }

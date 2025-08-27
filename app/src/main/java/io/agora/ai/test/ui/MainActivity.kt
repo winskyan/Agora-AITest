@@ -181,22 +181,18 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         LogUtils.i(TAG, "onPlaybackAudioFrameFinished")
     }
 
+    override fun onPushExternalAudioFrameStart() {
+        LogUtils.i(TAG, "onPushExternalAudioFrameStart")
+        pushExternalAudioFrame()
+    }
 
-    private fun handleJoinChannelSuccess() {
+    private fun pushExternalAudioFrame() {
         CoroutineScope(Dispatchers.IO).launch {
-//            val fileBytes =
-//                Utils.readAssetBytesContent(applicationContext, "tts_out_48k_1ch.pcm")
-//            LogUtils.d(TAG, "readAssetBytesContent fileBytes:${fileBytes.size}")
-//            RtcManager.pushExternalAudioFrame(
-//                fileBytes,
-//                48000, 1, true
-//            )
-
             val interval = 50 // ms
             mAudioFileReader = AudioFileReader(
                 applicationContext,
                 "tts_out_48k_1ch.pcm", 48000, 1, interval,
-                true,
+                false,
                 object : AudioFileReader.OnAudioReadListener {
                     override fun onAudioRead(
                         buffer: ByteArray?,

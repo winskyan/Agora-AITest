@@ -16,6 +16,7 @@ import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -40,6 +41,10 @@ object RtcManager {
     private var mAudioFrameIndex = 0
     private var mFrameStartTime = 0L
 
+    private var mStreamId = -1
+
+    private var mHandlePts = false
+
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
         override fun onSentenceEnd(
             sessionId: Int,
@@ -54,6 +59,10 @@ object RtcManager {
             )
             if (isSessionEnd) {
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
+                CoroutineScope(mExecutor).launch {
+                    mHandlePts = true
+                    sendStreamMessage(ExamplesConstants.TEST_PASS.toByteArray())
+                }
             }
         }
     }
@@ -94,7 +103,18 @@ object RtcManager {
                 "onStreamMessage uid:$uid streamId:$streamId data:${String(data ?: ByteArray(0))}"
             )
 
-            // Metadata registration no longer required. Kept for compatibility: ignore.
+            val message = data?.let { String(it) } ?: ""
+            if (message == ExamplesConstants.TEST_TASK_SEND_PCM_AI_WITH_PTS || message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS) {
+                CoroutineScope(mExecutor).launch {
+                    mHandlePts = true
+                    sendStreamMessage(ExamplesConstants.TEST_START.toByteArray())
+
+                    if (message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS) {
+                        delay(1000)
+                        mRtcEventCallback?.onPushExternalAudioFrameStart()
+                    }
+                }
+            }
         }
     }
 
@@ -302,7 +322,9 @@ object RtcManager {
                 if (byteArray.isEmpty()) {
                     return true
                 }
-                AudioFrameManager.processAudioFrame(byteArray, presentationMs)
+                if (mHandlePts) {
+                    AudioFrameManager.processAudioFrame(byteArray, presentationMs)
+                }
                 saveAudioFrame(byteArray)
                 return true
             }
@@ -435,7 +457,12 @@ object RtcManager {
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val timestamp = if (mHandlePts) AudioFrameManager.generatePts(
+            data,
+            sampleRate,
+            channels,
+            isSessionEnd
+        ) else 0L
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
@@ -445,6 +472,9 @@ object RtcManager {
             mCustomAudioTrackId
         )
 
+        if (isSessionEnd) {
+            mHandlePts = false
+        }
         return if (ret == 0) {
             Constants.ERR_OK
         } else {
@@ -455,6 +485,26 @@ object RtcManager {
 
     fun sendAudioMetadataEx(data: ByteArray) {
         (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
+    }
+
+    fun sendStreamMessage(messageByte: ByteArray) {
+        if (mRtcEngine == null) {
+            LogUtils.e(TAG, "sendStreamMessage error: not initialized")
+            return
+        }
+        if (mRtcConnection == null) {
+            LogUtils.e(TAG, "sendStreamMessage error: not joined channel")
+            return
+        }
+        if (mStreamId == -1) {
+            mStreamId = (mRtcEngine as RtcEngineEx).createDataStreamEx(false, false, mRtcConnection)
+        }
+        val ret =
+            (mRtcEngine as RtcEngineEx).sendStreamMessageEx(mStreamId, messageByte, mRtcConnection)
+        LogUtils.d(
+            TAG,
+            "sendStreamMessage streamId:$mStreamId ret:$ret message:${String(messageByte)}"
+        )
     }
 
     fun destroy() {
@@ -468,6 +518,7 @@ object RtcManager {
         mRtcConnection = null
         mRtcEventCallback = null
         mAudioFileName = ""
+        mStreamId = -1
 
         mExecutor.close()
 
