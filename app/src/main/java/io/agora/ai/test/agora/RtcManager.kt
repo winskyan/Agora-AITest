@@ -96,6 +96,19 @@ object RtcManager {
 
             // Metadata registration no longer required. Kept for compatibility: ignore.
         }
+
+        override fun onUserMuteAudio(uid: Int, muted: Boolean) {
+            super.onUserMuteAudio(uid, muted)
+            LogUtils.d(TAG, "onUserMuteAudio uid:$uid muted:$muted")
+        }
+
+        override fun onRemoteAudioStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
+            super.onRemoteAudioStateChanged(uid, state, reason, elapsed)
+            LogUtils.d(
+                TAG,
+                "onRemoteAudioStateChanged uid:$uid state:$state reason:$reason elapsed:$elapsed"
+            )
+        }
     }
 
     fun initialize(context: Context, appId: String, eventCallback: IRtcEventCallback): Int {
