@@ -120,9 +120,6 @@ object RtcManager {
 
         mRtcEventCallback = eventCallback
 
-        mAudioFileName = context.externalCacheDir?.absolutePath + "/audio_"
-        LogUtils.d(TAG, "mAudioFileName:$mAudioFileName")
-
         try {
             LogUtils.d(TAG, "RtcEngine version:" + RtcEngine.getSdkVersion())
             val rtcEngineConfig = RtcEngineConfig()
@@ -209,7 +206,7 @@ object RtcManager {
         }
 
         mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
-            16000,
+            24000,
             1
         )
 
@@ -376,8 +373,9 @@ object RtcManager {
             registerAudioFrame()
             initCustomAudioTracker()
 
-            mAudioFileName +=
-                channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
+            mAudioFileName =
+                LogUtils.getLogDir().path + "/audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
+            LogUtils.d(TAG, "save audio file: $mAudioFileName")
 
             val channelMediaOption = object : ChannelMediaOptions() {
                 init {
