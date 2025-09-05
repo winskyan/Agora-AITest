@@ -28,7 +28,7 @@ APP_CERTIFICATE=你的证书密钥
 - 关键参数（启用 Burst 及优化时延）：
     - `{"rtc.enable_debug_log":true}` 打开调试日志
     - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
-    - `{"che.audio.neteq.max_wait_first_decode_ms":0}`、`{"che.audio.neteq.max_wait_ms":0}`
+    - `{"che.audio.neteq.max_wait_ms":150}`
 
 2) 注册音频帧观察者 `registerAudioFrame`
 
