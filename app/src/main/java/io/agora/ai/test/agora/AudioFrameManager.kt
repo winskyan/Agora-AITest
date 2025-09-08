@@ -224,6 +224,29 @@ object AudioFrameManager {
         }
     }
 
+    fun processAudioFrameForLab(data: ByteArray, pts: Long) {
+        mAudioFrameFinishJob?.cancel()
+        LogUtils.d(
+            TAG,
+            "processAudioFrameForLab pts:$pts"
+        )
+
+        mAudioFrameFinishJob = mSingleThreadScope.launch {
+            val delayTime = PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS
+            delay(delayTime)
+            LogUtils.d(
+                TAG,
+                "onPlaybackAudioFrame finished due to timeout ${delayTime}ms"
+            )
+            callbackOnSentenceEnd(
+                1,
+                1,
+                1,
+                true
+            )
+        }
+    }
+
     private fun callbackOnSentenceEnd(
         sessionId: Int,
         sentenceId: Int,

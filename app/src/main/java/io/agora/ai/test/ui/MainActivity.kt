@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "wei1000"
+    private var mChannelName = "wei9999"
     private var mJoinSuccess = false
 
     private var mAudioFileReader: AudioFileReader? = null
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
         runOnUiThread {
-            handleJoinChannelSuccess()
+            //handleJoinChannelSuccess()
         }
     }
 

@@ -54,6 +54,8 @@ object RtcManager {
             )
             if (isSessionEnd) {
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
+                mAudioFileName =
+                    LogUtils.getLogDir().path + "/app_audio_" + mRtcConnection?.channelId + "_" + mRtcConnection?.localUid + "_" + System.currentTimeMillis() + ".pcm"
             }
         }
     }
@@ -147,11 +149,11 @@ object RtcManager {
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
+            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":120}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
             setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
-
 
             LogUtils.d(
                 TAG, "initRtcEngine success"
@@ -370,10 +372,10 @@ object RtcManager {
             mAudioFrameIndex = 0
             mFrameStartTime = 0L
             registerAudioFrame()
-            initCustomAudioTracker()
+            //initCustomAudioTracker()
 
             mAudioFileName =
-                LogUtils.getLogDir().path + "/audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
+                LogUtils.getLogDir().path + "/app_audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
             LogUtils.d(TAG, "save audio file: $mAudioFileName")
 
             val channelMediaOption = object : ChannelMediaOptions() {
@@ -381,10 +383,10 @@ object RtcManager {
                     autoSubscribeAudio = true
                     autoSubscribeVideo = false
                     clientRoleType = roleType
-                    publishCustomAudioTrack = true
+                    publishCustomAudioTrack = false
                     publishCustomAudioTrackId = mCustomAudioTrackId
-                    publishMicrophoneTrack = false
-                    enableAudioRecordingOrPlayout = false
+                    publishMicrophoneTrack = true
+                    enableAudioRecordingOrPlayout = true
                 }
             }
             mRtcConnection = RtcConnection(channelId, userId)
