@@ -30,7 +30,8 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "wei9999"
+    private var mChannelName = "wei99991"
+    private var mRecordingChannelName = "testRecord"
     private var mJoinSuccess = false
 
     private var mAudioFileReader: AudioFileReader? = null
@@ -105,6 +106,12 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                 }
 
                 RtcManager.initialize(applicationContext, KeyCenter.APP_ID, this)
+                RtcManager.joinChannel(
+                    mRecordingChannelName,
+                    KeyCenter.getRtcUid(),
+                    KeyCenter.getRtcToken(mRecordingChannelName, KeyCenter.getRtcUid()),
+                    Constants.CLIENT_ROLE_BROADCASTER
+                )
                 RtcManager.joinChannelEx(
                     channelName,
                     KeyCenter.getRtcUid(),
@@ -205,7 +212,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
                     ) {
                         if (buffer != null) {
                             mAudioFileReader?.let {
-                                RtcManager.pushExternalAudioFrame(
+                                RtcManager.pushExternalDirectAudioFrame(
                                     buffer,
                                     it.getSampleRate(),
                                     it.getNumOfChannels(),

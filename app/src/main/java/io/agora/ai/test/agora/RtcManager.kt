@@ -16,19 +16,27 @@ import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.util.ArrayDeque
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 object RtcManager {
     private const val TAG = "${ExamplesConstants.TAG}-RtcManager"
 
     private var mRtcEngine: RtcEngine? = null
     private var mCustomAudioTrackId = -1
+    private var mCustomAudioDirectTrackId = -1
 
     private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val mRecordingExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val mPushExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+
     private val mSingleThreadScope = CoroutineScope(mExecutor)
 
     private var mRtcConnection: RtcConnection? = null
@@ -39,6 +47,19 @@ object RtcManager {
 
     private var mAudioFrameIndex = 0
     private var mFrameStartTime = 0L
+
+    private var mDirectChannelId = ""
+    private var mRecordingChannelId = ""
+
+    // Playback mixing queue and 50ms ticker
+    private val mPlaybackQueueLock = Any()
+    private val mPlaybackQueue: ArrayDeque<ByteArray> = ArrayDeque()
+    private var mPlaybackQueueHeadOffset = 0
+    private var mPlaybackQueuedBytes = 0
+    private var mPlaybackSampleRate = 16000
+    private var mPlaybackChannels = 1
+    private val mPlaybackScheduler = Executors.newSingleThreadScheduledExecutor()
+    private var mPlaybackTimerFuture: ScheduledFuture<*>? = null
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
         override fun onSentenceEnd(
@@ -53,6 +74,7 @@ object RtcManager {
                 "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
             )
             if (isSessionEnd) {
+                mFrameStartTime = 0L
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
                 mAudioFileName =
                     LogUtils.getLogDir().path + "/app_audio_" + mRtcConnection?.channelId + "_" + mRtcConnection?.localUid + "_" + System.currentTimeMillis() + ".pcm"
@@ -67,8 +89,12 @@ object RtcManager {
                 "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
             )
 
-            if (mRtcConnection != null) {
-                mRtcConnection = RtcConnection(channel, uid)
+            if (channel == mDirectChannelId) {
+                if (mRtcConnection != null) {
+                    mRtcConnection = RtcConnection(channel, uid)
+                }
+            } else if (channel == mRecordingChannelId) {
+                mRtcEngine?.muteLocalAudioStream(true)
             }
 
             mRtcEventCallback?.onJoinChannelSuccess(channel, uid, elapsed)
@@ -151,7 +177,7 @@ object RtcManager {
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":120}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
-            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+            //setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
@@ -185,12 +211,26 @@ object RtcManager {
         }
     }
 
-    private fun initCustomAudioTracker() {
+    private fun initCustomAudioDirectTracker() {
         val audioTrackConfig = AudioTrackConfig()
         audioTrackConfig.enableLocalPlayback = false
         audioTrackConfig.enableAudioProcessing = false
-        mCustomAudioTrackId = mRtcEngine?.createCustomAudioTrack(
+        mCustomAudioDirectTrackId = mRtcEngine?.createCustomAudioTrack(
             Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
+            audioTrackConfig
+        ) ?: 0
+        LogUtils.d(
+            TAG,
+            "createCustomAudioTrack mCustomAudimCustomAudioDirectTrackIdoTrackId:$mCustomAudioDirectTrackId"
+        )
+    }
+
+    private fun initCustomAudioTracker() {
+        val audioTrackConfig = AudioTrackConfig()
+        audioTrackConfig.enableLocalPlayback = true
+        audioTrackConfig.enableAudioProcessing = false
+        mCustomAudioTrackId = mRtcEngine?.createCustomAudioTrack(
+            Constants.AudioTrackType.AUDIO_TRACK_MIXABLE,
             audioTrackConfig
         ) ?: 0
         LogUtils.d(
@@ -206,8 +246,13 @@ object RtcManager {
             return
         }
 
+        mRtcEngine?.setRecordingAudioFrameParameters(
+            16000,
+            1, Constants.RAW_AUDIO_FRAME_OP_MODE_READ_ONLY, 320
+        )
+
         mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
-            24000,
+            16000,
             1
         )
 
@@ -223,6 +268,18 @@ object RtcManager {
                 renderTimeMs: Long,
                 avsync_type: Int
             ): Boolean {
+//                LogUtils.d(
+//                    TAG,
+//                    "onRecordAudioFrame channelId:$channelId mRecordingChannelId:$mRecordingChannelId"
+//                )
+                if (channelId == mRecordingChannelId) {
+                    buffer?.rewind()
+                    val byteArray = ByteArray(buffer?.remaining() ?: 0)
+                    buffer?.get(byteArray)
+                    mPushExecutor.asExecutor().execute {
+                        pushExternalDirectAudioFrame(byteArray, samplesPerSec, channels, false)
+                    }
+                }
                 return true
             }
 
@@ -281,7 +338,9 @@ object RtcManager {
                 rtpTimestamp: Int,
                 presentationMs: Long
             ): Boolean {
-
+                if (channelId != null && channelId != mDirectChannelId) {
+                    return true
+                }
                 // must get data synchronously and process data asynchronously
                 buffer?.rewind()
                 val byteArray = ByteArray(buffer?.remaining() ?: 0)
@@ -289,6 +348,7 @@ object RtcManager {
 
                 if (mFrameStartTime == 0L) {
                     mFrameStartTime = System.currentTimeMillis()
+                    clearPlaybackQueue()
                 }
 
                 LogUtils.d(
@@ -313,7 +373,12 @@ object RtcManager {
                 if (byteArray.isEmpty()) {
                     return true
                 }
-                AudioFrameManager.processAudioFrame(byteArray, presentationMs)
+                // Enqueue data and ensure 50ms ticker is running
+                enqueuePlaybackData(byteArray)
+                mPlaybackSampleRate = samplesPerSec
+                mPlaybackChannels = channels
+                ensurePlaybackTicker()
+                AudioFrameManager.processAudioFrameForLab(byteArray, presentationMs)
                 saveAudioFrame(byteArray)
                 return true
             }
@@ -369,10 +434,12 @@ object RtcManager {
             return -Constants.ERR_NOT_INITIALIZED
         }
         try {
+            stopPlaybackTicker()
+            clearPlaybackQueue()
+            mDirectChannelId = channelId
             mAudioFrameIndex = 0
             mFrameStartTime = 0L
-            registerAudioFrame()
-            //initCustomAudioTracker()
+            initCustomAudioDirectTracker()
 
             mAudioFileName =
                 LogUtils.getLogDir().path + "/app_audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
@@ -383,10 +450,10 @@ object RtcManager {
                     autoSubscribeAudio = true
                     autoSubscribeVideo = false
                     clientRoleType = roleType
-                    publishCustomAudioTrack = false
-                    publishCustomAudioTrackId = mCustomAudioTrackId
-                    publishMicrophoneTrack = true
-                    enableAudioRecordingOrPlayout = true
+                    publishCustomAudioTrack = true
+                    publishCustomAudioTrackId = mCustomAudioDirectTrackId
+                    publishMicrophoneTrack = false
+                    enableAudioRecordingOrPlayout = false
                 }
             }
             mRtcConnection = RtcConnection(channelId, userId)
@@ -396,7 +463,6 @@ object RtcManager {
                 channelMediaOption,
                 mRtcEventHandler
             )
-
 
             LogUtils.d(
                 TAG, "joinChannelEx ret:$ret"
@@ -412,6 +478,47 @@ object RtcManager {
         return Constants.ERR_OK
     }
 
+    fun joinChannel(
+        channelId: String,
+        userId: Int,
+        rtcToken: String,
+        roleType: Int
+    ): Int {
+        LogUtils.d(
+            TAG,
+            "joinChannel channelId:$channelId userId:$userId roleType:$roleType"
+        )
+
+        if (mRtcEngine == null) {
+            LogUtils.e(TAG, "joinChannel error: not initialized")
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+        initCustomAudioTracker()
+        registerAudioFrame()
+        mRecordingChannelId = channelId
+        try {
+            mRtcEngine?.joinChannel(rtcToken, channelId, userId, object : ChannelMediaOptions() {
+                init {
+                    autoSubscribeAudio = true
+                    autoSubscribeVideo = false
+                    clientRoleType = roleType
+                    publishCustomAudioTrack = false
+                    publishCustomAudioTrackId = mCustomAudioTrackId
+                    publishMicrophoneTrack = true
+                    enableAudioRecordingOrPlayout = true
+                }
+            })
+        } catch (e: Exception) {
+            e.printStackTrace()
+            LogUtils.e(
+                TAG, "joinChannel error:" + e.message
+            )
+            return -Constants.ERR_FAILED
+        }
+
+        return 0
+    }
+
     fun leaveChannel(): Int {
         LogUtils.d(TAG, "leaveChannel")
         if (mRtcEngine == null) {
@@ -419,7 +526,12 @@ object RtcManager {
             return -Constants.ERR_NOT_INITIALIZED
         }
         try {
+            stopPlaybackTicker()
+            clearPlaybackQueue()
             mRtcEngine?.leaveChannel()
+            if (mRtcConnection != null) {
+                (mRtcEngine as RtcEngineEx).leaveChannelEx(mRtcConnection)
+            }
             AudioFrameManager.release()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -431,6 +543,40 @@ object RtcManager {
         return Constants.ERR_OK
     }
 
+    fun pushExternalDirectAudioFrame(
+        data: ByteArray,
+        sampleRate: Int,
+        channels: Int,
+        isSessionEnd: Boolean
+    ): Int {
+        if (mRtcEngine == null) {
+            LogUtils.e(
+                TAG,
+                "pushExternalDirectAudioFrameByIdInternal error: not initialized"
+            )
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+        if (mCustomAudioDirectTrackId == -1) {
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+        val timestamp = 0L//AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val ret = mRtcEngine?.pushExternalAudioFrame(
+            data,
+            timestamp,
+            sampleRate,
+            channels,
+            Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
+            mCustomAudioDirectTrackId
+        )
+
+        return if (ret == 0) {
+            Constants.ERR_OK
+        } else {
+            LogUtils.e(TAG, "pushExternalDirectAudioFrame error: $ret")
+            -Constants.ERR_FAILED
+        }
+    }
+
     fun pushExternalAudioFrame(
         data: ByteArray,
         sampleRate: Int,
@@ -440,14 +586,14 @@ object RtcManager {
         if (mRtcEngine == null) {
             LogUtils.e(
                 TAG,
-                "pushExternalVideoFrameByIdInternal error: not initialized"
+                "pushExternalAudioFrameByIdInternal error: not initialized"
             )
             return -Constants.ERR_NOT_INITIALIZED
         }
         if (mCustomAudioTrackId == -1) {
             return -Constants.ERR_NOT_INITIALIZED
         }
-        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val timestamp = 0L
         val ret = mRtcEngine?.pushExternalAudioFrame(
             data,
             timestamp,
@@ -466,6 +612,16 @@ object RtcManager {
     }
 
     fun sendAudioMetadataEx(data: ByteArray) {
+        if (mRtcEngine == null) {
+            LogUtils.e(
+                TAG,
+                "sendAudioMetadataEx error: not initialized"
+            )
+            return
+        }
+        if (mRtcConnection == null) {
+            return
+        }
         (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
     }
 
@@ -473,6 +629,11 @@ object RtcManager {
         if (mCustomAudioTrackId != -1) {
             mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
             mCustomAudioTrackId = -1
+        }
+
+        if (mCustomAudioDirectTrackId != -1) {
+            mRtcEngine?.destroyCustomAudioTrack(mCustomAudioDirectTrackId)
+            mCustomAudioDirectTrackId = -1
         }
         AudioFrameManager.release()
         RtcEngine.destroy()
@@ -482,7 +643,116 @@ object RtcManager {
         mAudioFileName = ""
 
         mExecutor.close()
+        mRecordingExecutor.close()
+        mPushExecutor.close()
+        stopPlaybackTicker()
+        try {
+            mPlaybackScheduler.shutdownNow()
+        } catch (_: Throwable) {
+        }
 
         LogUtils.d(TAG, "rtc destroy")
+    }
+
+    private fun enqueuePlaybackData(data: ByteArray) {
+        synchronized(mPlaybackQueueLock) {
+            mPlaybackQueue.addLast(data)
+            mPlaybackQueuedBytes += data.size
+        }
+    }
+
+    private fun clearPlaybackQueue() {
+        synchronized(mPlaybackQueueLock) {
+            mPlaybackQueue.clear()
+            mPlaybackQueueHeadOffset = 0
+            mPlaybackQueuedBytes = 0
+        }
+    }
+
+    private fun ensurePlaybackTicker() {
+        if (mPlaybackTimerFuture != null && !mPlaybackTimerFuture!!.isCancelled) {
+            return
+        }
+        mPlaybackTimerFuture = mPlaybackScheduler.scheduleAtFixedRate({
+            try {
+                val chunk = dequeuePlaybackChunk()
+                if (chunk != null) {
+                    mPushExecutor.asExecutor().execute {
+                        pushExternalAudioFrame(chunk, mPlaybackSampleRate, mPlaybackChannels, false)
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        }, 50, 50, TimeUnit.MILLISECONDS)
+    }
+
+    private fun stopPlaybackTicker() {
+        try {
+            mPlaybackTimerFuture?.cancel(true)
+        } catch (_: Throwable) {
+        } finally {
+            mPlaybackTimerFuture = null
+        }
+    }
+
+    private fun dequeuePlaybackChunk(): ByteArray? {
+        val sampleRate: Int
+        val channels: Int
+        synchronized(mPlaybackQueueLock) {
+            sampleRate = mPlaybackSampleRate
+            channels = mPlaybackChannels
+        }
+        if (sampleRate <= 0 || channels <= 0) {
+            return null
+        }
+        val bytesNeeded = ((sampleRate * channels * 2L * 50L) / 1000L).toInt()
+        synchronized(mPlaybackQueueLock) {
+            if (mPlaybackQueuedBytes < bytesNeeded) {
+                return null
+            }
+            val output = ByteArray(bytesNeeded)
+            var bytesCopied = 0
+            while (bytesCopied < bytesNeeded && mPlaybackQueue.isNotEmpty()) {
+                val head = mPlaybackQueue.peekFirst()
+                if (head == null) {
+                    break
+                }
+                val availableInHead = head.size - mPlaybackQueueHeadOffset
+                val toCopy = minOf(bytesNeeded - bytesCopied, availableInHead)
+                System.arraycopy(head, mPlaybackQueueHeadOffset, output, bytesCopied, toCopy)
+                bytesCopied += toCopy
+                mPlaybackQueueHeadOffset += toCopy
+                if (mPlaybackQueueHeadOffset >= head.size) {
+                    mPlaybackQueue.removeFirst()
+                    mPlaybackQueueHeadOffset = 0
+                }
+            }
+            mPlaybackQueuedBytes -= bytesCopied
+            if (bytesCopied == bytesNeeded) {
+                return output
+            } else {
+                // Should not happen due to size check, but guard anyway
+                // Put back the partially consumed bytes at the front (simple approach: prepend to queue)
+                // For simplicity, if partial, re-prepend and return null. This case is unlikely.
+                val restored = ByteArray(bytesCopied)
+                System.arraycopy(output, 0, restored, 0, bytesCopied)
+                if (restored.isNotEmpty()) {
+                    // Put back to the front by creating a new array that concatenates
+                    // However ArrayDeque has no addFirst for arrays with offset. We'll rebuild queue state.
+                    val remaining = ArrayDeque<ByteArray>()
+                    remaining.add(restored)
+                    while (mPlaybackQueue.isNotEmpty()) {
+                        remaining.add(mPlaybackQueue.removeFirst())
+                    }
+                    mPlaybackQueue.clear()
+                    for (b in remaining) {
+                        mPlaybackQueue.addLast(b)
+                    }
+                    mPlaybackQueuedBytes += bytesCopied
+                    mPlaybackQueueHeadOffset = 0
+                }
+                return null
+            }
+        }
     }
 }
