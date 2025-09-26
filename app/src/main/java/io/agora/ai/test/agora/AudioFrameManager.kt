@@ -30,6 +30,8 @@ object AudioFrameManager {
     private var mLastEndCommandSessionId: Int = -1  // Last session that received end command
     private var mLastInterruptCommandSessionId: Int =
         -1  // Last session that received interrupt command
+    private var mLastEndedSessionId: Int =
+        -1  // Last session that ended (to avoid duplicate end events)
 
     /**
      * Callback interface to notify session events.
@@ -253,9 +255,17 @@ object AudioFrameManager {
 
         // Handle session changes and commands
         if (mCurrentSessionId != sessionId && mCurrentSessionId != -1) {
-            // Session changed - end previous session
-            LogUtils.d(TAG, "Session changed from $mCurrentSessionId to $sessionId")
-            mCallback?.onSessionEnd(mCurrentSessionId)
+            // Session changed - end previous session only if it hasn't already ended
+            if (mLastEndedSessionId != mCurrentSessionId) {
+                LogUtils.d(TAG, "Session changed from $mCurrentSessionId to $sessionId")
+                mCallback?.onSessionEnd(mCurrentSessionId)
+                mLastEndedSessionId = mCurrentSessionId
+            } else {
+                LogUtils.d(
+                    TAG,
+                    "Session changed from $mCurrentSessionId to $sessionId (previous session already ended)"
+                )
+            }
         }
 
         if (mCurrentSessionId != sessionId) {
@@ -282,7 +292,7 @@ object AudioFrameManager {
                         mLastEndCommandSessionId = sessionId
                         mSessionTimeoutJob?.cancel()
                         mCallback?.onSessionEnd(sessionId)
-                        mCurrentSessionId = -1
+                        mLastEndedSessionId = sessionId
                     } else {
                         LogUtils.d(
                             TAG,
@@ -298,7 +308,7 @@ object AudioFrameManager {
                         mLastInterruptCommandSessionId = sessionId
                         mSessionTimeoutJob?.cancel()
                         mCallback?.onSessionInterrupt(sessionId)
-                        mCurrentSessionId = -1
+                        mLastEndedSessionId = sessionId
                     } else {
                         LogUtils.d(
                             TAG,
@@ -323,7 +333,7 @@ object AudioFrameManager {
             )
             if (mCurrentSessionId == sessionId) {
                 mCallback?.onSessionEnd(sessionId)
-                mCurrentSessionId = -1
+                mLastEndedSessionId = sessionId
             }
         }
     }
@@ -346,6 +356,7 @@ object AudioFrameManager {
         mCurrentSessionId = -1
         mLastEndCommandSessionId = -1
         mLastInterruptCommandSessionId = -1
+        mLastEndedSessionId = -1
     }
 
     /**
