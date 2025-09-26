@@ -47,7 +47,6 @@ object RtcManager {
             chunkId: Int,
             isSessionEnd: Boolean
         ) {
-            super.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
             LogUtils.i(
                 TAG,
                 "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"

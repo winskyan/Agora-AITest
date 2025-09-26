@@ -116,11 +116,11 @@ object AudioFrameManager {
         pts = pts or ((((if (isSessionEnd) 1 else 0).toLong()) and 0x1L) shl 32)
         pts = pts or (basePts32 and 0xFFFF_FFFFL)
 
-        LogUtils.d(
-            TAG,
-            "generatePts pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
-                    "sessionId:$sessionId durationMs:${durationMs} lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
-        )
+//        LogUtils.d(
+//            TAG,
+//            "generatePts pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
+//                    "sessionId:$sessionId durationMs:${durationMs} lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
+//        )
 
         if (isSessionEnd) {
             // advance session id every call, wrap to 1
@@ -174,16 +174,25 @@ object AudioFrameManager {
         )
 
         val previousPayload = mLastPayload
+        mLastPayload = currentPayload
         if (previousPayload == null) {
             LogUtils.d(TAG, "first payload: $currentPayload")
         } else if (previousPayload.sessionId != currentPayload.sessionId) {
             LogUtils.d(TAG, "payload changed: prev=$previousPayload -> curr=$currentPayload")
-            callbackOnSentenceEnd(
-                previousPayload.sessionId,
-                previousPayload.sentenceId,
-                previousPayload.chunkId,
-                true
-            )
+            if (mEndedSessionId != previousPayload.sessionId) {
+                mEndedSessionId = previousPayload.sessionId
+                callbackOnSentenceEnd(
+                    previousPayload.sessionId,
+                    previousPayload.sentenceId,
+                    previousPayload.chunkId,
+                    true
+                )
+            } else {
+                LogUtils.d(
+                    TAG,
+                    "previous session ${previousPayload.sessionId} already ended, skip callback"
+                )
+            }
             return
         } else if (previousPayload.sentenceId != currentPayload.sentenceId) {
             LogUtils.d(TAG, "sentenceId changed: prev=$previousPayload -> curr=$currentPayload")
@@ -195,8 +204,6 @@ object AudioFrameManager {
             )
             return
         }
-
-        mLastPayload = currentPayload
 
         if (isSessionEnd) {
             LogUtils.d(TAG, "isSessionEnd true: curr=$currentPayload")
@@ -247,12 +254,11 @@ object AudioFrameManager {
         chunkId: Int,
         isSessionEnd: Boolean
     ) {
-        LogUtils.d(
+        LogUtils.i(
             TAG,
             "callbackOnSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
         )
         mCallback?.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
-        mLastPayload = null
     }
 
     /**
