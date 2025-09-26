@@ -41,22 +41,21 @@ object RtcManager {
     private var mFrameStartTime = 0L
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
-        override fun onSentenceEnd(
-            sessionId: Int,
-            sentenceId: Int,
-            chunkId: Int,
-            isSessionEnd: Boolean
-        ) {
-            super.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
-            LogUtils.i(
-                TAG,
-                "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
-            )
-            if (isSessionEnd) {
-                mRtcEventCallback?.onPlaybackAudioFrameFinished()
-                mAudioFrameIndex = 0
-                mFrameStartTime = 0L
-            }
+
+        override fun onSessionStart(sessionId: Int) {
+            LogUtils.i(TAG, "onSessionStart sessionId:$sessionId")
+        }
+
+        override fun onSessionEnd(sessionId: Int) {
+            LogUtils.i(TAG, "onSessionEnd sessionId:$sessionId")
+
+            mRtcEventCallback?.onPlaybackAudioFrameFinished()
+            mAudioFrameIndex = 0
+            mFrameStartTime = 0L
+        }
+
+        override fun onSessionInterrupt(sessionId: Int) {
+            LogUtils.i(TAG, "onSessionInterrupt sessionId:$sessionId")
         }
     }
 

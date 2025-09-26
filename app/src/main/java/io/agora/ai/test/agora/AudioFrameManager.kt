@@ -11,52 +11,72 @@ import java.util.concurrent.Executors
 
 object AudioFrameManager {
     private const val TAG = "${ExamplesConstants.TAG}-AudioFrameManager"
-    private const val PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS: Long = 500 // ms
-    private const val PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS: Long = 200 // ms
+    private const val SESSION_TIMEOUT_MS = 500L
 
     private var mAudioFrameFinishJob: Job? = null
     private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val mSingleThreadScope = CoroutineScope(mExecutor)
     private var mCallback: ICallback? = null
-    private var mLastPayload: SentencePayload? = null
 
-    private var mSessionId18: Int = 1
-    private var mBasePts32: Long = 0L
+    // New protocol state tracking
+    private var mSessionId8: Int = 0  // 8-bit session ID (0-255)
+    private var mSentenceId12: Int = 0  // 12-bit sentence ID for data packets
+    private var mBasePts16: Int = 0  // 16-bit base PTS
+    private var mCurrentSessionId: Int = -1  // Track current active session
+    private var mSessionTimeoutJob: Job? = null
+
+
+    // Track processed command packets to avoid duplicate callbacks
+    private var mLastEndCommandSessionId: Int = -1  // Last session that received end command
+    private var mLastInterruptCommandSessionId: Int =
+        -1  // Last session that received interrupt command
 
     /**
-     * Callback interface to notify sentence/session end events.
+     * Callback interface to notify session events.
      *
      * Terminology:
-     * - session: a full round of dialog from start to end
-     * - sentence: a single utterance within a session
-     * - chunk: a fragment of audio belonging to one sentence
-     * - isSessionEnd: whether this marks the end of the session
+     * - session: a round of dialog identified by session_id
      */
     interface ICallback {
         /**
-         * Invoked when a sentence or a whole session ends.
-         * @param sessionId identifier of the dialog session
-         * @param sentenceId identifier of the sentence within the session
-         * @param chunkId identifier of the chunk within the sentence
-         * @param isSessionEnd true if a session end is detected; false if only a sentence end is detected
+         * Invoked when a new session starts (first data packet with new session_id).
+         * @param sessionId identifier of the dialog session (8-bit, 0-255)
          */
-        fun onSentenceEnd(sessionId: Int, sentenceId: Int, chunkId: Int, isSessionEnd: Boolean) {
+        fun onSessionStart(sessionId: Int) {
+
+        }
+
+        /**
+         * Invoked when a session ends (cmd_type=1 received or timeout).
+         * @param sessionId identifier of the dialog session (8-bit, 0-255)
+         */
+        fun onSessionEnd(sessionId: Int) {
+
+        }
+
+        /**
+         * Invoked when a session is interrupted (cmd_type=2 received).
+         * @param sessionId identifier of the dialog session (8-bit, 0-255)
+         */
+        fun onSessionInterrupt(sessionId: Int) {
 
         }
     }
 
     /**
-     * Parsed tracking unit from pts fields.
-     * @param sessionId identifier of the dialog session
-     * @param sentenceId identifier of the sentence within the session
-     * @param chunkId identifier of the chunk within the sentence
-     * @param isSessionEnd whether this marks the end of the session
+     * Parsed tracking unit from pts fields (new protocol).
+     * @param sessionId 8-bit session identifier
+     * @param cmdOrDataType 0=data, 1=cmd
+     * @param sentenceId 12-bit sentence ID (for data packets)
+     * @param cmdType 5-bit command type (for cmd packets): 1=session_end, 2=session_interrupt
+     * @param sessionDurInPacks 12-bit session duration in packets (for cmd_type=1)
      */
-    data class SentencePayload(
+    data class SessionPayload(
         val sessionId: Int,
-        val sentenceId: Int,
-        val chunkId: Int,
-        val isSessionEnd: Boolean
+        val cmdOrDataType: Int,
+        val sentenceId: Int = 0,  // Only valid for data packets
+        val cmdType: Int = 0,     // Only valid for cmd packets
+        val sessionDurInPacks: Int = 0  // Only valid for cmd_type=1
     )
 
     /**
@@ -75,23 +95,26 @@ object AudioFrameManager {
 
 
     /**
-     * Generate PTS.
+     * Generate PTS (new protocol).
      *
      * Bit layout (MSB -> LSB):
-     * [3 bits: version] | [18 bits: sessionId] | [10 bits: last_chunk_duration_ms] |
-     * [1 bit: isSessionEnd] | [32 bits: basePts]
+     * [1 bit: fixed=0] | [1 bit: is_agora] | [4 bits: version] | [8 bits: session_id] |
+     * [1 bit: cmd_or_data_type] | [...] | [16 bits: base_pts]
      *
-     * Rules:
-     * - version defaults to 1
-     * - sessionId is an 18-bit internal counter, always increments (wraps to 1 after 0x3FFFF)
-     * - last_chunk_duration_ms: when {@code isSessionEnd == true}, set to {@code durationMs & 0x3FF}; otherwise 0
-     * - basePts: 32-bit rolling timestamp accumulator (adds {@code durationMs} each call, wraps at 2^32)
-     * - durationMs is computed from PCM length: {@code durationMs = data.size / ((sampleRate * channels * 2) / 1000)} for 16-bit PCM
+     * For data packets (cmd_or_data_type=0):
+     * [1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:0] | [12:sentence_id] |
+     * [5:reserved] | [16:reserved] | [16:base_pts]
      *
-     * @param data raw PCM bytes of the current frame (16-bit PCM)
-     * @param sampleRate sample rate in Hz (e.g., 48000)
-     * @param channels number of audio channels (e.g., 1 for mono)
-     * @param isSessionEnd whether the current frame marks the end of the whole session
+     * For cmd packets (cmd_or_data_type=1):
+     * [1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:1] | [5:cmd_type] |
+     * [12:session_dur_or_reserved] | [16:reserved] | [16:base_pts]
+     *
+     * @param data raw PCM bytes (ignored for cmd packets, can be empty)
+     * @param sampleRate sample rate (ignored)
+     * @param channels channels (ignored)
+     * @param isSessionEnd legacy parameter (ignored)
+     * @param cmdType command type: 0=data, 1=session_end, 2=session_interrupt
+     * @param sessionDurInPacks session duration in packets (only for cmd_type=1)
      * @return 64-bit PTS encoded
      */
     @Synchronized
@@ -101,141 +124,208 @@ object AudioFrameManager {
         channels: Int,
         isSessionEnd: Boolean
     ): Long {
-        val version = 1
-        val safeVersion = version and 0x7
-        val sessionId = mSessionId18 and 0x3FFFF
-        val durationMs = data.size / ((sampleRate * channels * 2) / 1000) // 16-bit PCM
-        val lastChunkDuration = if (isSessionEnd) (durationMs and 0x3FF) else 0
-        val basePts32 = mBasePts32
+        return generatePtsNew(data, sampleRate, channels, 0, 0)
+    }
+
+    /**
+     * Generate PTS with new protocol support.
+     * @param cmdType 0=data, 1=session_end, 2=session_interrupt
+     * @param sessionDurInPacks session duration in packets (only for cmd_type=1)
+     */
+    @Synchronized
+    fun generatePtsNew(
+        data: ByteArray,
+        sampleRate: Int,
+        channels: Int,
+        cmdType: Int,
+        sessionDurInPacks: Int = 0
+    ): Long {
+        val fixed = 0  // Always 0
+        val isAgora = 1  // 1 for Agora
+        val version = 1  // Version 1
+        val sessionId = mSessionId8 and 0xFF
+        val cmdOrDataType = if (cmdType == 0) 0 else 1
+        val basePts = mBasePts16 and 0xFFFF
 
         var pts = 0L
-        pts = pts or ((safeVersion.toLong() and 0x7L) shl 61)
-        pts = pts or ((sessionId.toLong() and 0x3FFFFL) shl 43)
-        pts = pts or ((lastChunkDuration.toLong() and 0x3FFL) shl 33)
-        pts = pts or ((((if (isSessionEnd) 1 else 0).toLong()) and 0x1L) shl 32)
-        pts = pts or (basePts32 and 0xFFFF_FFFFL)
+        pts = pts or ((fixed.toLong() and 0x1L) shl 63)
+        pts = pts or ((isAgora.toLong() and 0x1L) shl 62)
+        pts = pts or ((version.toLong() and 0xFL) shl 58)
+        pts = pts or ((sessionId.toLong() and 0xFFL) shl 50)
+        pts = pts or ((cmdOrDataType.toLong() and 0x1L) shl 49)
 
-        LogUtils.d(
-            TAG,
-            "generatePts pts:$pts ${String.format("0x%016X", pts)} isSessionEnd:$isSessionEnd " +
-                    "sessionId:$sessionId durationMs:${durationMs} lastChunkDurationMs:$lastChunkDuration basePts32:$basePts32"
-        )
-
-        if (isSessionEnd) {
-            // advance session id every call, wrap to 1
-            mSessionId18 = if (mSessionId18 >= 0x3FFFF) 1 else mSessionId18 + 1
-            mBasePts32 = 0L
+        if (cmdOrDataType == 0) {
+            // Data packet: [12:sentence_id] | [5:reserved] | [16:reserved] | [16:base_pts]
+            val sentenceId = mSentenceId12 and 0xFFF
+            pts = pts or ((sentenceId.toLong() and 0xFFFL) shl 37)
+            // 5-bit reserved at bits 32-36 (kept as 0)
+            // 16-bit reserved at bits 16-31 (kept as 0)
         } else {
-            mBasePts32 = (mBasePts32 + (durationMs.toLong() and 0xFFFF_FFFFL)) and 0xFFFF_FFFFL
+            // Cmd packet: [5:cmd_type] | [12:session_dur_or_reserved] | [16:reserved] | [16:base_pts]
+            val safeCmdType = cmdType and 0x1F
+            pts = pts or ((safeCmdType.toLong() and 0x1FL) shl 44)
+            if (cmdType == 1) {
+                // Session end: use sessionDurInPacks
+                val safeSessionDur = sessionDurInPacks and 0xFFF
+                pts = pts or ((safeSessionDur.toLong() and 0xFFFL) shl 32)
+            }
+            // 16-bit reserved at bits 16-31 (kept as 0)
         }
+
+        pts = pts or (basePts.toLong() and 0xFFFFL)
+
+//        LogUtils.d(
+//            TAG,
+//            "generatePtsNew pts:$pts ${
+//                String.format(
+//                    "0x%016X",
+//                    pts
+//                )
+//            } sessionId:$sessionId cmdType:$cmdType " +
+//                    "cmdOrDataType:$cmdOrDataType sentenceId:${if (cmdOrDataType == 0) mSentenceId12 else -1} basePts:$basePts"
+//        )
+
+        // Advance counters
+        if (cmdOrDataType == 0) {
+            // Data packet: increment sentence ID and base PTS
+            mSentenceId12 = (mSentenceId12 + 1) and 0xFFF
+        }
+        mBasePts16 = (mBasePts16 + 10) and 0xFFFF  // Always increment by 10ms
 
         return pts
     }
 
     /**
-     * Process an audio frame.
+     * Process an audio frame with new protocol.
      *
-     * When {@code version = 2}, PTS bit layout:
-     * [high 4 bits: version] | [16 bits: sessionId] | [16 bits: sentenceId] |
-     * [10 bits: chunkId] | [2 bits: isEnd] | [low 16 bits: basePts]
+     * New PTS bit layout:
+     * [1:fixed=0] | [1:is_agora] | [4:version] | [8:session_id] | [1:cmd_or_data_type] | [...] | [16:base_pts]
      *
-     * End detection logic:
-     * - Immediate switches:
-     *   - sessionId changes: immediately report previous session end (isSessionEnd = true)
-     *   - sentenceId changes (same session): immediately report previous sentence end (isSessionEnd = false)
-     * - Silence timeout window (500ms): if no new frame arrives in time, report end for the last payload:
-     *   - isEnd == 0 -> sentence end (isSessionEnd = false)
-     *   - isEnd != 0 -> session end (isSessionEnd = true)
+     * Session detection logic:
+     * - New session start: when session_id changes from previous
+     * - Session end: when cmd_type=1 received or timeout (500ms)
+     * - Session interrupt: when cmd_type=2 received
      *
      * @param data raw PCM audio bytes of the current frame
-     * @param pts 64-bit PTS carried with the frame. Only version = 2 is processed currently; other versions are ignored
+     * @param pts 64-bit PTS carried with the frame
      */
     @Synchronized
     fun processAudioFrame(data: ByteArray, pts: Long) {
         if (pts == 0L) {
             return
         }
-        mAudioFrameFinishJob?.cancel()
 
-        val version = ((pts ushr 60) and 0xFL).toInt()
-        val sessionId = ((pts ushr 44) and 0xFFFFL).toInt()
-        val sentenceId = ((pts ushr 28) and 0xFFFFL).toInt()
-        val chunkId = ((pts ushr 18) and 0x3FFL).toInt()
-        val isEndBits = ((pts ushr 16) and 0x3L).toInt()
+        // Parse new protocol
+        val fixed = ((pts ushr 63) and 0x1L).toInt()
+        val isAgora = ((pts ushr 62) and 0x1L).toInt()
+        val version = ((pts ushr 58) and 0xFL).toInt()
+        val sessionId = ((pts ushr 50) and 0xFFL).toInt()
+        val cmdOrDataType = ((pts ushr 49) and 0x1L).toInt()
         val basePts = (pts and 0xFFFFL).toInt()
-        val isSessionEnd = isEndBits != 0
 
-        val currentPayload = SentencePayload(sessionId, sentenceId, chunkId, isSessionEnd)
+        var sentenceId = 0
+        var cmdType = 0
+        var sessionDurInPacks = 0
+
+        if (cmdOrDataType == 0) {
+            // Data packet
+            sentenceId = ((pts ushr 37) and 0xFFFL).toInt()
+        } else {
+            // Cmd packet
+            cmdType = ((pts ushr 44) and 0x1FL).toInt()
+            if (cmdType == 1) {
+                sessionDurInPacks = ((pts ushr 32) and 0xFFFL).toInt()
+            }
+        }
+
+        val currentPayload =
+            SessionPayload(sessionId, cmdOrDataType, sentenceId, cmdType, sessionDurInPacks)
 
         LogUtils.d(
             TAG,
-            "processAudioFrame version:${version} currentPayload:${currentPayload} basePts:$basePts"
+            "processAudioFrame version:$version currentPayload:$currentPayload  basePts:$basePts pts:$pts pts:${
+                String.format(
+                    "0x%016X",
+                    pts
+                )
+            }"
         )
 
-        val previousPayload = mLastPayload
-        if (previousPayload == null) {
-            LogUtils.d(TAG, "first payload: $currentPayload")
-        } else if (previousPayload.sessionId != currentPayload.sessionId) {
-            LogUtils.d(TAG, "payload changed: prev=$previousPayload -> curr=$currentPayload")
-            callbackOnSentenceEnd(
-                previousPayload.sessionId,
-                previousPayload.sentenceId,
-                previousPayload.chunkId,
-                true
-            )
-            return
-        } else if (previousPayload.sentenceId != currentPayload.sentenceId) {
-            LogUtils.d(TAG, "sentenceId changed: prev=$previousPayload -> curr=$currentPayload")
-            callbackOnSentenceEnd(
-                previousPayload.sessionId,
-                previousPayload.sentenceId,
-                previousPayload.chunkId,
-                false
-            )
-            return
+        // Handle session changes and commands
+        if (mCurrentSessionId != sessionId && mCurrentSessionId != -1) {
+            // Session changed - end previous session
+            LogUtils.d(TAG, "Session changed from $mCurrentSessionId to $sessionId")
+            mCallback?.onSessionEnd(mCurrentSessionId)
         }
 
-        mLastPayload = currentPayload
+        if (mCurrentSessionId != sessionId) {
+            // New session started
+            LogUtils.d(TAG, "New session started: $sessionId")
+            mCurrentSessionId = sessionId
+            mCallback?.onSessionStart(sessionId)
+            startSessionTimeout(sessionId)
+        } else {
+            // Same session - restart timeout
+            startSessionTimeout(sessionId)
+        }
 
-        mAudioFrameFinishJob = mSingleThreadScope.launch {
-            val delayTime =
-                if (mLastPayload?.isSessionEnd == true) PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS else PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS
-            delay(delayTime)
-            LogUtils.d(
-                TAG,
-                "onPlaybackAudioFrame finished due to timeout ${delayTime}ms"
-            )
-            val snap = mLastPayload?.let {
-                SentencePayload(
-                    it.sessionId,
-                    it.sentenceId,
-                    it.chunkId,
-                    it.isSessionEnd
-                )
-            }
-            if (snap != null) {
-                callbackOnSentenceEnd(
-                    snap.sessionId,
-                    snap.sentenceId,
-                    snap.chunkId,
-                    true
-                )
+        // Handle command packets - only process first packet for each session
+        if (cmdOrDataType == 1) {
+            when (cmdType) {
+                1 -> {
+                    // Session end command - only process first packet for this session
+                    if (mLastEndCommandSessionId != sessionId) {
+                        LogUtils.d(
+                            TAG,
+                            "Session end command received for session $sessionId, duration: $sessionDurInPacks packets"
+                        )
+                        mLastEndCommandSessionId = sessionId
+                        mSessionTimeoutJob?.cancel()
+                        mCallback?.onSessionEnd(sessionId)
+                        mCurrentSessionId = -1
+                    } else {
+                        LogUtils.d(
+                            TAG,
+                            "Ignoring duplicate session end command for session $sessionId"
+                        )
+                    }
+                }
+
+                2 -> {
+                    // Session interrupt command - only process first packet for this session
+                    if (mLastInterruptCommandSessionId != sessionId) {
+                        LogUtils.d(TAG, "Session interrupt command received for session $sessionId")
+                        mLastInterruptCommandSessionId = sessionId
+                        mSessionTimeoutJob?.cancel()
+                        mCallback?.onSessionInterrupt(sessionId)
+                        mCurrentSessionId = -1
+                    } else {
+                        LogUtils.d(
+                            TAG,
+                            "Ignoring duplicate session interrupt command for session $sessionId"
+                        )
+                    }
+                }
             }
         }
     }
 
-    private fun callbackOnSentenceEnd(
-        sessionId: Int,
-        sentenceId: Int,
-        chunkId: Int,
-        isSessionEnd: Boolean
-    ) {
-        LogUtils.d(
-            TAG,
-            "callbackOnSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
-        )
-        mCallback?.onSentenceEnd(sessionId, sentenceId, chunkId, isSessionEnd)
-        mLastPayload = null
+    /**
+     * Start or restart session timeout mechanism.
+     */
+    private fun startSessionTimeout(sessionId: Int) {
+        mSessionTimeoutJob?.cancel()
+        mSessionTimeoutJob = mSingleThreadScope.launch {
+            delay(SESSION_TIMEOUT_MS)
+            LogUtils.d(
+                TAG,
+                "Session timeout for sessionId: $sessionId after ${SESSION_TIMEOUT_MS}ms"
+            )
+            if (mCurrentSessionId == sessionId) {
+                mCallback?.onSessionEnd(sessionId)
+                mCurrentSessionId = -1
+            }
+        }
     }
 
     /**
@@ -245,10 +335,62 @@ object AudioFrameManager {
     fun release() {
         LogUtils.d(TAG, "AudioFrameManager release")
         mAudioFrameFinishJob?.cancel()
+        mSessionTimeoutJob?.cancel()
         mExecutor.close()
         mCallback = null
-        mLastPayload = null
-        mSessionId18 = 1
-        mBasePts32 = 0L
+
+        // Reset new protocol state
+        mSessionId8 = 0
+        mSentenceId12 = 0
+        mBasePts16 = 0
+        mCurrentSessionId = -1
+        mLastEndCommandSessionId = -1
+        mLastInterruptCommandSessionId = -1
+    }
+
+    /**
+     * Set the current session ID for generating PTS.
+     * Call this when starting a new session.
+     */
+    fun setSessionId(sessionId: Int) {
+        mSessionId8 = sessionId and 0xFF
+        mSentenceId12 = 0  // Reset sentence counter for new session
+        LogUtils.d(TAG, "Set session ID to: $mSessionId8")
+    }
+
+    /**
+     * Send session end command packets (10 packets for reliability).
+     * @param sessionDurInPacks duration of the session in packets
+     */
+    fun sendSessionEndCommand(sessionDurInPacks: Int) {
+        LogUtils.d(
+            TAG,
+            "Sending session end command for session $mSessionId8, duration: $sessionDurInPacks packets"
+        )
+        // Send 10 packets for reliability as specified in protocol
+        repeat(10) {
+            val pts = generatePtsNew(ByteArray(0), 0, 0, 1, sessionDurInPacks)
+            // In real implementation, this PTS would be sent with pushExternalAudioFrame
+            LogUtils.d(
+                TAG,
+                "Session end command packet ${it + 1}/10: ${String.format("0x%016X", pts)}"
+            )
+        }
+    }
+
+    /**
+     * Send session interrupt command packets (10 packets for reliability).
+     */
+    fun sendSessionInterruptCommand() {
+        LogUtils.d(TAG, "Sending session interrupt command for session $mSessionId8")
+        // Send 10 packets for reliability as specified in protocol
+        repeat(10) {
+            val pts = generatePtsNew(ByteArray(0), 0, 0, 2, 0)
+            // In real implementation, this PTS would be sent with pushExternalAudioFrame
+            LogUtils.d(
+                TAG,
+                "Session interrupt command packet ${it + 1}/10: ${String.format("0x%016X", pts)}"
+            )
+        }
     }
 }
