@@ -54,6 +54,8 @@ object RtcManager {
             )
             if (isSessionEnd) {
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
+                mAudioFrameIndex = 0
+                mFrameStartTime = 0L
             }
         }
     }
@@ -147,6 +149,7 @@ object RtcManager {
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
+            //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":120}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
             setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
@@ -309,6 +312,7 @@ object RtcManager {
                 }
 
                 if (byteArray.isEmpty()) {
+                    LogUtils.i(TAG, "onPlaybackAudioFrameBeforeMixing empty data")
                     return true
                 }
                 AudioFrameManager.processAudioFrame(byteArray, presentationMs)
