@@ -22,6 +22,7 @@ object AudioFrameManager {
 
     private var mSessionId18: Int = 1
     private var mBasePts32: Long = 0L
+    private var mEndedSessionId: Int? = null
 
     /**
      * Callback interface to notify sentence/session end events.
@@ -197,6 +198,22 @@ object AudioFrameManager {
 
         mLastPayload = currentPayload
 
+        if (isSessionEnd) {
+            LogUtils.d(TAG, "isSessionEnd true: curr=$currentPayload")
+            if (mEndedSessionId != currentPayload.sessionId) {
+                mEndedSessionId = currentPayload.sessionId
+                callbackOnSentenceEnd(
+                    currentPayload.sessionId,
+                    currentPayload.sentenceId,
+                    currentPayload.chunkId,
+                    true
+                )
+            } else {
+                LogUtils.d(TAG, "session $currentPayload.sessionId already ended, skip callback")
+            }
+            return
+        }
+
         mAudioFrameFinishJob = mSingleThreadScope.launch {
             val delayTime =
                 if (mLastPayload?.isSessionEnd == true) PLAYBACK_AUDIO_FRAME_MIN_TIMEOUT_MS else PLAYBACK_AUDIO_FRAME_MAX_TIMEOUT_MS
@@ -250,5 +267,6 @@ object AudioFrameManager {
         mLastPayload = null
         mSessionId18 = 1
         mBasePts32 = 0L
+        mEndedSessionId = null
     }
 }
