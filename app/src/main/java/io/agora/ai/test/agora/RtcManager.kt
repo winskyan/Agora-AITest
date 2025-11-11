@@ -143,7 +143,11 @@ object RtcManager {
 
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
 
-            mRtcEngine?.setAudioProfile(Constants.AUDIO_PROFILE_DEFAULT)
+            if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
+                mRtcEngine?.setAudioProfile(Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO)
+            } else {
+                mRtcEngine?.setAudioProfile(Constants.AUDIO_PROFILE_DEFAULT)
+            }
             mRtcEngine?.setAudioScenario(Constants.AUDIO_SCENARIO_AI_CLIENT)
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
