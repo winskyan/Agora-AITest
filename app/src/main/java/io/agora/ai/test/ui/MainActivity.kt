@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "agaa"
+    private var mChannelName = "wei1000"
     private var mJoinSuccess = false
 
     private var mAudioFileReader: AudioFileReader? = null
