@@ -26,9 +26,9 @@ APP_CERTIFICATE=你的证书密钥
     - 频道场景：`CHANNEL_PROFILE_LIVE_BROADCASTING`
     - 音频 Profile/场景：`AUDIO_PROFILE_DEFAULT`、`AUDIO_SCENARIO_AI_CLIENT`
 - 关键参数（启用 Burst 及优化时延）：
-    - `{"rtc.enable_debug_log":true}` 打开调试日志
     - `{"che.audio.get_burst_mode":true}` 启用 burst 模式
-    - `{"che.audio.neteq.max_wait_ms":150}`
+    - `{"che.audio.neteq.max_wait_first_decode_ms":40}` 设置首次解码最大等待时间为40ms
+    - `{"che.audio.neteq.max_wait_ms":150}` 设置网络队列最大等待时间为150ms
 
 2) 注册音频帧观察者 `registerAudioFrame`
 
@@ -55,75 +55,31 @@ APP_CERTIFICATE=你的证书密钥
 5) 准备音频源并推送帧 `pushExternalAudioFrame`
 
 - 保证与源数据一致的参数：采样率（如 48000）、通道数（如 1）、采样字节数（2 字节/16bit）
+- **必须传入 PTS 协议生成的 pts 值**：使用 `AudioFrameManager.generatePtsNew()` 生成符合新协议的 64 位
+  PTS
 - 支持一次性推送整块 PCM，或使用 `AudioFileReader` 按固定帧间隔（如 10ms）循环读取并在回调中推送
 
-### 新协议 PTS 生成与处理
+**PTS 生成规则参考：**
 
-#### 协议概述
+- 数据包：`AudioFrameManager.generatePtsNew(data, sampleRate, channels, 0, 0)`
+- 会话结束命令：`AudioFrameManager.generatePtsNew(data, 0, 0, 1, sessionDurInPacks)`
+- 会话中断命令：`AudioFrameManager.generatePtsNew(data, 0, 0, 2, 0)`
 
-新协议支持基于会话（Session）的音频流管理，包含数据包和命令包两种类型。协议头格式如下：
+**推送示例：**
 
-**基础协议头：**
-```
-[1位:固定0] | [1位:is_agora] | [4位:version] | [8位:session_id] | [1位:cmd_or_data_type] | [...] | [16位:base_pts]
-```
-
-**数据包 (cmd_or_data_type=0)：**
-```
-[1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:0] | [12:sentence_id] | [5:reserved] | [16:reserved] | [16:base_pts]
-```
-
-**命令包 (cmd_or_data_type=1)：**
-```
-[1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:1] | [5:cmd_type] | [12:session_dur_or_reserved] | [16:reserved] | [16:base_pts]
-```
-
-#### 命令类型说明
-
-- **cmd_type = 1**：会话结束命令
-  - `session_dur_or_reserved` 字段包含会话持续时长（以包为单位）
-  - 发送时机：会话结束时发送 10 个包确保可靠性
-  
-- **cmd_type = 2**：会话中断命令
-  - 用于打断当前会话（类似 mute 功能）
-  - 发送时机：需要中断当前会话时发送 10 个包确保可靠性
-
-#### API 使用
-
-**1. 设置会话 ID：**
 ```kotlin
-AudioFrameManager.setSessionId(sessionId)
-```
+// 生成带协议信息的 PTS
+val pts = AudioFrameManager.generatePtsNew(frameData, sampleRate, channels, 0, 0)
 
-**2. 生成数据包 PTS：**
-```kotlin
-val pts = AudioFrameManager.generatePtsNew(data, sampleRate, channels, 0, 0)
-rtcEngine.pushExternalAudioFrame(
-    data,
-    pts,
+// 推送音频帧
+RtcManager.pushExternalAudioFrame(
+    frameData,
+    pts,           // 传入生成的 PTS
     sampleRate,
     channels,
-    Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
-    customAudioTrackId
+    isLastFrame
 )
 ```
-
-**3. 发送会话结束命令：**
-```kotlin
-AudioFrameManager.sendSessionEndCommand(sessionDurationInPackets)
-```
-
-**4. 发送会话中断命令：**
-```kotlin
-AudioFrameManager.sendSessionInterruptCommand()
-```
-
-#### 协议特性
-
-- **可靠性保证**：命令包发送 10 次，在 10% 丢包率下成功率达 99.99%
-- **去重处理**：接收端只处理每个会话的第一个命令包，忽略重复包
-- **超时机制**：500ms 无数据自动判定会话结束
-- **会话管理**：自动检测会话切换并触发相应回调
 
 6) 监听远端音频帧并保存（可选）
 
@@ -144,9 +100,85 @@ AudioFrameManager.sendSessionInterruptCommand()
 `RtcManager.pushExternalAudioFrame`、`RtcManager.leaveChannel`、`RtcManager.destroy` 具体实现；触发流程由
 `MainActivity` 的按钮点击与回调驱动。
 
+### 新协议 PTS 生成与处理
+
+#### 协议概述
+
+新协议支持基于会话（Session）的音频流管理，包含数据包和命令包两种类型。协议头格式如下：
+
+**基础协议头：**
+
+```
+[1位:固定0] | [1位:is_agora] | [4位:version] | [8位:session_id] | [1位:cmd_or_data_type] | [...] | [16位:base_pts]
+```
+
+**数据包 (cmd_or_data_type=0)：**
+
+```
+[1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:0] | [12:sentence_id] | [5:reserved] | [16:reserved] | [16:base_pts]
+```
+
+**命令包 (cmd_or_data_type=1)：**
+
+```
+[1:0] | [1:is_agora] | [4:version] | [8:session_id] | [1:1] | [5:cmd_type] | [12:session_dur_or_reserved] | [16:reserved] | [16:base_pts]
+```
+
+#### 命令类型说明
+
+- **cmd_type = 1**：会话结束命令
+    - `session_dur_or_reserved` 字段包含会话持续时长（以包为单位）
+    - 发送时机：会话结束时发送 10 个包确保可靠性
+
+- **cmd_type = 2**：会话中断命令
+    - 用于打断当前会话（类似 mute 功能）
+    - 发送时机：需要中断当前会话时发送 10 个包确保可靠性
+
+#### API 使用
+
+**1. 设置会话 ID：**
+
+```kotlin
+AudioFrameManager.setSessionId(sessionId)
+```
+
+**2. 生成数据包 PTS：**
+
+```kotlin
+val pts = AudioFrameManager.generatePtsNew(data, sampleRate, channels, 0, 0)
+rtcEngine.pushExternalAudioFrame(
+    data,
+    pts,
+    sampleRate,
+    channels,
+    Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
+    customAudioTrackId
+)
+```
+
+**3. 发送会话结束命令：**
+
+```kotlin
+AudioFrameManager.sendSessionEndCommand(sessionDurationInPackets)
+```
+
+**4. 发送会话中断命令：**
+
+```kotlin
+AudioFrameManager.sendSessionInterruptCommand()
+```
+
+#### 协议特性
+
+- **可靠性保证**：命令包发送 10 次，在 10% 丢包率下成功率达 99.99%
+- **去重处理**：接收端只处理每个会话的第一个命令包，忽略重复包
+- **超时机制**：500ms 无数据自动判定会话结束
+- **会话管理**：自动检测会话切换并触发相应回调
+
 ## AudioFrameManager 使用说明
 
-`AudioFrameManager` 用于基于会话（Session）的音频流管理，支持会话开始、结束、中断的检测与回调。新协议直接从 `processAudioFrame` 的 `pts` 位域中解析会话信息。
+`AudioFrameManager` 用于基于会话（Session）的音频流管理，支持会话开始、结束、中断的检测与回调。新协议直接从
+`processAudioFrame` 的 `pts` 位域中解析会话信息。
 
 ### 术语说明
 
@@ -157,6 +189,7 @@ AudioFrameManager.sendSessionInterruptCommand()
 ### 协议解析
 
 新协议位分布：
+
 ```
 [1:固定0] | [1:is_agora] | [4:version] | [8:session_id] | [1:cmd_or_data_type] | [...] | [16:base_pts]
 ```
@@ -168,8 +201,8 @@ AudioFrameManager.sendSessionInterruptCommand()
 
 - **会话开始检测**：当接收到新的 session_id 时自动触发 `onSessionStart`
 - **会话结束检测**：
-  - 接收到 cmd_type=1 命令包时立即触发 `onSessionEnd`
-  - 500ms 超时无数据时自动触发 `onSessionEnd`
+    - 接收到 cmd_type=1 命令包时立即触发 `onSessionEnd`
+    - 500ms 超时无数据时自动触发 `onSessionEnd`
 - **会话中断检测**：接收到 cmd_type=2 命令包时立即触发 `onSessionInterrupt`
 - **去重处理**：同一 session_id 的重复命令包会被忽略，只处理第一个
 
@@ -199,14 +232,20 @@ AudioFrameManager.sendSessionInterruptCommand()
 
 #### PTS 生成方法
 
-- `AudioFrameManager.generatePtsNew(data: ByteArray, sampleRate: Int, channels: Int, cmdType: Int, sessionDurInPacks: Int = 0)`：生成新协议 PTS
-    - 参数：
-        - `data`：PCM 数据（命令包可为空）
-        - `sampleRate`、`channels`：音频参数（命令包忽略）
-        - `cmdType`：0=数据包，1=会话结束，2=会话中断
-        - `sessionDurInPacks`：会话持续包数（仅 cmdType=1 使用）
+-
 
-- `AudioFrameManager.generatePts(data: ByteArray, sampleRate: Int, channels: Int, isSessionEnd: Boolean)`：兼容性方法，内部调用 `generatePtsNew`
+`AudioFrameManager.generatePtsNew(data: ByteArray, sampleRate: Int, channels: Int, cmdType: Int, sessionDurInPacks: Int = 0)`
+：生成新协议 PTS
+- 参数：
+- `data`：PCM 数据（命令包可为空）
+- `sampleRate`、`channels`：音频参数（命令包忽略）
+- `cmdType`：0=数据包，1=会话结束，2=会话中断
+- `sessionDurInPacks`：会话持续包数（仅 cmdType=1 使用）
+
+-
+
+`AudioFrameManager.generatePts(data: ByteArray, sampleRate: Int, channels: Int, isSessionEnd: Boolean)`
+：兼容性方法，内部调用 `generatePtsNew`
 
 #### 会话管理方法
 
@@ -224,12 +263,12 @@ val audioCallback = object : AudioFrameManager.ICallback {
         Log.d(TAG, "会话开始: $sessionId")
         // 处理会话开始逻辑
     }
-    
+
     override fun onSessionEnd(sessionId: Int) {
         Log.d(TAG, "会话结束: $sessionId")
         // 处理会话结束逻辑
     }
-    
+
     override fun onSessionInterrupt(sessionId: Int) {
         Log.d(TAG, "会话中断: $sessionId")
         // 处理会话中断逻辑
@@ -273,8 +312,8 @@ AudioFrameManager.release()
 
 1. **判断会话开始**：解析协议，收到新的 session_id 即表示新会话开始
 2. **判断会话结束**：
-   - 主动结束：收到 cmd_type=1 命令包
-   - 超时结束：500ms 无数据自动判定
+    - 主动结束：收到 cmd_type=1 命令包
+    - 超时结束：500ms 无数据自动判定
 3. **字幕对齐**：利用 sentence_id 进行句子级别的字幕同步
 4. **自渲染打断**：在多模态场景下，使用 cmd_type=2 实现有序的当前会话→打断→新会话流程
 
