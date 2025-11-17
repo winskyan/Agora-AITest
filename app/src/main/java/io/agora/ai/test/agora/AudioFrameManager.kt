@@ -149,6 +149,8 @@ object AudioFrameManager {
         val cmdOrDataType = if (cmdType == 0) 0 else 1
         val basePts = mBasePts16 and 0xFFFF
 
+        val byteDataMs = data.size * 1000 / (sampleRate * channels * 2)
+
         var pts = 0L
         pts = pts or ((fixed.toLong() and 0x1L) shl 63)
         pts = pts or ((isAgora.toLong() and 0x1L) shl 62)
@@ -184,7 +186,7 @@ object AudioFrameManager {
                     pts
                 )
             } isAgora:${isAgora} version:${version} sessionId:$sessionId cmdType:$cmdType " +
-                    "cmdOrDataType:$cmdOrDataType sentenceId:${if (cmdOrDataType == 0) mSentenceId12 else -1} basePts:$basePts"
+                    "cmdOrDataType:$cmdOrDataType sentenceId:${if (cmdOrDataType == 0) mSentenceId12 else -1} byteDataMs:${byteDataMs} basePts:$basePts"
         )
 
         // Advance counters
@@ -192,7 +194,7 @@ object AudioFrameManager {
             // Data packet: increment sentence ID and base PTS
             mSentenceId12 = (mSentenceId12 + 1) and 0xFFF
         }
-        mBasePts16 = (mBasePts16 + 10) and 0xFFFF  // Always increment by 10ms
+        mBasePts16 = (mBasePts16 + byteDataMs) and 0xFFFF  // Always increment by 10ms
 
         return pts
     }

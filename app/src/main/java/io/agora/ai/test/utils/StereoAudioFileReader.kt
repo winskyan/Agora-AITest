@@ -56,18 +56,18 @@ class StereoAudioFileReader(
     private fun mixToStereo(leftBuffer: ByteArray, rightBuffer: ByteArray): ByteArray {
         val monoSize = minOf(leftBuffer.size, rightBuffer.size)
         val stereoBuffer = ByteArray(monoSize * 2)
-        
+
         // 16位PCM，每个样本2字节
         for (i in 0 until monoSize step 2) {
             // 左声道样本
             stereoBuffer[i * 2] = leftBuffer[i]
             stereoBuffer[i * 2 + 1] = leftBuffer[i + 1]
-            
+
             // 右声道样本
             stereoBuffer[i * 2 + 2] = rightBuffer[i]
             stereoBuffer[i * 2 + 3] = rightBuffer[i + 1]
         }
-        
+
         return stereoBuffer
     }
 
@@ -86,6 +86,7 @@ class StereoAudioFileReader(
     }
 
     fun stop() {
+        if (!pushing) return
         pushing = false
         if (thread != null) {
             try {
@@ -108,13 +109,13 @@ class StereoAudioFileReader(
                 e.printStackTrace()
                 return
             }
-            
+
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
             pushing = true
 
             val startTime = System.currentTimeMillis()
             var sentAudioFrames = 0
-            
+
             while (pushing) {
                 val frame = readNextFrame() ?: break
                 audioReadListener?.onAudioRead(
@@ -166,45 +167,54 @@ class StereoAudioFileReader(
                     } catch (_: Throwable) {
                         0
                     }
-                    
+
                     if (leftRemaining <= 0 || rightRemaining <= 0) {
                         return null
                     }
 
                     val leftBuffer = ByteArray(monoFrameSize)
                     val rightBuffer = ByteArray(monoFrameSize)
-                    
+
                     var leftTotalRead = 0
                     var rightTotalRead = 0
-                    
+
                     try {
                         // 读取左声道数据
                         while (leftTotalRead < monoFrameSize && leftTotalRead < leftRemaining) {
-                            val read = leftInputStream?.read(leftBuffer, leftTotalRead, monoFrameSize - leftTotalRead) ?: -1
+                            val read = leftInputStream?.read(
+                                leftBuffer,
+                                leftTotalRead,
+                                monoFrameSize - leftTotalRead
+                            ) ?: -1
                             if (read <= 0) break
                             leftTotalRead += read
                         }
-                        
+
                         // 读取右声道数据
                         while (rightTotalRead < monoFrameSize && rightTotalRead < rightRemaining) {
-                            val read = rightInputStream?.read(rightBuffer, rightTotalRead, monoFrameSize - rightTotalRead) ?: -1
+                            val read = rightInputStream?.read(
+                                rightBuffer,
+                                rightTotalRead,
+                                monoFrameSize - rightTotalRead
+                            ) ?: -1
                             if (read <= 0) break
                             rightTotalRead += read
                         }
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
-                    
+
                     if (leftTotalRead <= 0 || rightTotalRead <= 0) {
                         return null
                     }
-                    
+
                     // 混合成双声道
                     val stereoBuffer = mixToStereo(leftBuffer, rightBuffer)
-                    val isLastFrame = leftRemaining <= monoFrameSize || rightRemaining <= monoFrameSize
-                    
+                    val isLastFrame =
+                        leftRemaining <= monoFrameSize || rightRemaining <= monoFrameSize
+
                     return Pair(stereoBuffer, isLastFrame)
-                    
+
                 } else {
                     // 循环播放逻辑
                     val leftRemaining = try {
@@ -217,7 +227,7 @@ class StereoAudioFileReader(
                     } catch (_: Throwable) {
                         0
                     }
-                    
+
                     if (leftRemaining <= 0 || rightRemaining <= 0) {
                         // 重新打开文件
                         try {
@@ -235,40 +245,49 @@ class StereoAudioFileReader(
 
                     val leftBuffer = ByteArray(monoFrameSize)
                     val rightBuffer = ByteArray(monoFrameSize)
-                    
+
                     var leftTotalRead = 0
                     var rightTotalRead = 0
-                    
+
                     try {
                         // 读取左声道数据
                         while (leftTotalRead < monoFrameSize) {
-                            val read = leftInputStream?.read(leftBuffer, leftTotalRead, monoFrameSize - leftTotalRead) ?: -1
+                            val read = leftInputStream?.read(
+                                leftBuffer,
+                                leftTotalRead,
+                                monoFrameSize - leftTotalRead
+                            ) ?: -1
                             if (read <= 0) break
                             leftTotalRead += read
                         }
-                        
+
                         // 读取右声道数据
                         while (rightTotalRead < monoFrameSize) {
-                            val read = rightInputStream?.read(rightBuffer, rightTotalRead, monoFrameSize - rightTotalRead) ?: -1
+                            val read = rightInputStream?.read(
+                                rightBuffer,
+                                rightTotalRead,
+                                monoFrameSize - rightTotalRead
+                            ) ?: -1
                             if (read <= 0) break
                             rightTotalRead += read
                         }
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
-                    
+
                     if (leftTotalRead <= 0 || rightTotalRead <= 0) {
                         continue
                     }
-                    
+
                     // 混合成双声道
                     val stereoBuffer = mixToStereo(leftBuffer, rightBuffer)
-                    val isLastFrame = leftRemaining <= monoFrameSize || rightRemaining <= monoFrameSize
-                    
+                    val isLastFrame =
+                        leftRemaining <= monoFrameSize || rightRemaining <= monoFrameSize
+
                     return Pair(stereoBuffer, isLastFrame)
                 }
             } while (attemptReopen)
-            
+
             return null
         }
     }

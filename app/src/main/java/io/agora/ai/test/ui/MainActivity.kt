@@ -108,14 +108,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
-                // 根据开关停止对应的音频读取器
-                if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
-                    mStereoAudioFileReader?.stop()
-                    // 关闭双声道音频保存文件
-                    closeStereoAudioFile()
-                } else {
-                    mAudioFileReader?.stop()
-                }
+                stopSendAudio()
                 RtcManager.leaveChannel()
             } else {
                 var channelName = binding.etChannelName.text.toString()
@@ -136,6 +129,10 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         binding.btnSendAudioMetadata.setOnClickListener {
             RtcManager.sendAudioMetadataEx("aaa".toByteArray())
 
+        }
+
+        binding.btnStopSendAudio.setOnClickListener {
+            stopSendAudio()
         }
     }
 
@@ -209,6 +206,17 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         LogUtils.i(TAG, "onPlaybackAudioFrameFinished")
     }
 
+    private fun stopSendAudio() {
+        // 根据开关停止对应的音频读取器
+        if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
+            mStereoAudioFileReader?.stop()
+            // 关闭双声道音频保存文件
+            closeStereoAudioFile()
+        } else {
+            mAudioFileReader?.stop()
+        }
+    }
+
     /**
      * 创建双声道音频保存文件
      */
@@ -253,6 +261,9 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
      * 关闭双声道音频文件
      */
     private fun closeStereoAudioFile() {
+        if (mStereoAudioOutputStream == null) {
+            return
+        }
         try {
             mStereoAudioOutputStream?.close()
             mStereoAudioOutputStream = null

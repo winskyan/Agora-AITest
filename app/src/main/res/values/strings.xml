@@ -3,4 +3,5 @@
     <string name="join">Join</string>
     <string name="leave">Leave</string>
     <string name="send_audio_metadata">Send Audio Metadata</string>
+    <string name="stop_send_audio">Stop Send Audio</string>
 </resources>
