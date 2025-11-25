@@ -14,10 +14,14 @@ import io.agora.ai.test.utils.AudioFileReader
 import io.agora.ai.test.utils.KeyCenter
 import io.agora.ai.test.utils.LogUtils
 import io.agora.ai.test.utils.StereoAudioFileReader
+import io.agora.ai.test.utils.Utils
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
@@ -46,6 +50,10 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
     // 双声道音频保存相关
     private var mStereoAudioOutputStream: FileOutputStream? = null
     private var mStereoAudioFile: File? = null
+
+    // 音频测试时间记录
+    private var mAudioTestStartTime: Long = 0L
+    private var mAudioTestCount: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,21 +116,9 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
         binding.btnJoin.setOnClickListener {
             if (mJoinSuccess) {
-                stopSendAudio()
-                RtcManager.leaveChannel()
+                leaveChannel()
             } else {
-                var channelName = binding.etChannelName.text.toString()
-                if (channelName.isEmpty()) {
-                    channelName = mChannelName
-                }
-
-                RtcManager.initialize(applicationContext, KeyCenter.APP_ID, this)
-                RtcManager.joinChannelEx(
-                    channelName,
-                    KeyCenter.getRtcUid(),
-                    KeyCenter.getRtcToken(channelName, KeyCenter.getRtcUid()),
-                    Constants.CLIENT_ROLE_BROADCASTER
-                )
+                joinChannel()
             }
         }
 
@@ -134,6 +130,75 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         binding.btnStopSendAudio.setOnClickListener {
             stopSendAudio()
         }
+    }
+
+    private fun joinChannel() {
+        var channelName = binding.etChannelName.text.toString()
+        if (channelName.isEmpty()) {
+            channelName = mChannelName
+        }
+
+        // 如果启用了音频测试，记录测试开始时间
+        if (ExamplesConstants.ENABLE_AUDIO_TEST) {
+            if (mAudioTestStartTime == 0L) {
+                mAudioTestStartTime = System.currentTimeMillis()
+                LogUtils.i(TAG, "音频测试：开始测试，开始时间: $mAudioTestStartTime")
+                // 更新 UI 显示测试已开始
+                runOnUiThread {
+                    val dateFormat =
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+                    val startTimeText = dateFormat.format(Date(mAudioTestStartTime))
+                    binding.tvAudioTestInfo.text = "测试已开始...\n测试开始时间: $startTimeText"
+                }
+            }
+            mAudioTestCount++
+            LogUtils.i(TAG, "音频测试：开始播放，当前测试次数: $mAudioTestCount")
+        }
+
+        RtcManager.initialize(applicationContext, KeyCenter.APP_ID, this)
+        RtcManager.joinChannelEx(
+            channelName,
+            KeyCenter.getRtcUid(),
+            KeyCenter.getRtcToken(channelName, KeyCenter.getRtcUid()),
+            Constants.CLIENT_ROLE_BROADCASTER
+        )
+    }
+
+    private fun leaveChannel() {
+        stopSendAudio()
+        RtcManager.leaveChannel()
+    }
+
+    /**
+     * 更新测试时间到 UI（不重置开始时间）
+     */
+    private fun updateTestTimeUI() {
+        if (mAudioTestStartTime > 0) {
+            val totalTime = System.currentTimeMillis() - mAudioTestStartTime
+            val totalSeconds = totalTime / 1000
+            val totalMinutes = totalSeconds / 60
+            val remainingSeconds = totalSeconds % 60
+
+            // 格式化测试开始时间：年月日时分秒毫秒
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+            val startTimeText = dateFormat.format(Date(mAudioTestStartTime))
+
+            val timeText =
+                "测试进行中...\n测试开始时间: $startTimeText\n当前测试次数：$mAudioTestCount\n总测试时间: $totalMinutes 分 $remainingSeconds 秒（${totalTime} 毫秒）"
+            binding.tvAudioTestInfo.text = timeText
+        }
+    }
+
+    private fun destroyEngine() {
+        // 确保关闭音频文件
+        if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
+            mStereoAudioFileReader?.stop()
+            closeStereoAudioFile()
+        } else {
+            mAudioFileReader?.stop()
+        }
+
+        RtcManager.destroy()
     }
 
     private fun handleOnBackPressed() {
@@ -150,19 +215,12 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
     }
 
     private fun exit() {
-        // 确保关闭音频文件
-        if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
-            mStereoAudioFileReader?.stop()
-            closeStereoAudioFile()
-        } else {
-            mAudioFileReader?.stop()
-        }
-
-        RtcManager.destroy()
+        destroyEngine()
         finishAffinity()
         finish()
         exitProcess(0)
     }
+
 
     private fun updateUI() {
         binding.btnJoin.text =
@@ -186,8 +244,10 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     override fun onLeaveChannelSuccess() {
         LogUtils.d(TAG, "onLeaveChannelSuccess")
+
         mJoinSuccess = false
         runOnUiThread {
+            updateTestTimeUI()
             updateToolbarTitle(getString(R.string.app_name))
             updateUI()
         }
@@ -204,6 +264,11 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     override fun onPlaybackAudioFrameFinished() {
         LogUtils.i(TAG, "onPlaybackAudioFrameFinished")
+
+        // 如果启用了音频测试，检查文件大小并执行循环测试逻辑
+        if (ExamplesConstants.ENABLE_AUDIO_TEST) {
+            checkAndExecuteAudioTestLoop()
+        }
     }
 
     private fun stopSendAudio() {
@@ -272,6 +337,166 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
         } catch (e: IOException) {
             LogUtils.e(TAG, "关闭双声道音频文件失败: ${e.message}")
         }
+    }
+
+    /**
+     * 检查文件大小并执行音频测试循环
+     * 在收到 onPlaybackAudioFrameFinished 后调用
+     * 使用异步操作，等待2秒确保文件写入完成后再检查
+     */
+    private fun checkAndExecuteAudioTestLoop() {
+        // 使用协程异步执行，避免阻塞回调
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            try {
+                LogUtils.d(
+                    TAG,
+                    "音频测试：收到 onPlaybackAudioFrameFinished，等待2秒确保文件写入完成"
+                )
+
+                // 等待2秒，确保文件写入完成
+                delay(2000)
+
+                val audioFileName = RtcManager.getAudioFileName()
+                if (audioFileName.isEmpty()) {
+                    LogUtils.e(TAG, "音频测试：音频文件路径为空，无法检查")
+                    return@launch
+                }
+
+                val audioFile = File(audioFileName)
+                if (!audioFile.exists()) {
+                    LogUtils.e(TAG, "音频测试：音频文件不存在: $audioFileName")
+                    return@launch
+                }
+
+                val fileSize = audioFile.length()
+                LogUtils.d(
+                    TAG,
+                    "音频测试：等待2秒后检查文件大小 - 期望: ${ExamplesConstants.EXPECTED_PCM_FILE_SIZE_BYTES} bytes, 实际: $fileSize bytes"
+                )
+
+                if (fileSize >= ExamplesConstants.EXPECTED_PCM_FILE_SIZE_BYTES) {
+                    LogUtils.i(
+                        TAG,
+                        "音频测试：文件大小匹配（期望: ${ExamplesConstants.EXPECTED_PCM_FILE_SIZE_BYTES} bytes，实际: $fileSize bytes），开始执行循环操作"
+                    )
+                    // 更新 UI 显示当前测试时间
+                    runOnUiThread {
+                        updateTestTimeUI()
+                    }
+                    executeAudioTestLoop()
+                } else {
+                    LogUtils.w(
+                        TAG,
+                        "音频测试：文件大小不匹配（期望: ${ExamplesConstants.EXPECTED_PCM_FILE_SIZE_BYTES} bytes，实际: $fileSize bytes），停止测试循环"
+                    )
+                    runOnUiThread {
+                        showAudioTestError("文件大小不匹配：期望 ${ExamplesConstants.EXPECTED_PCM_FILE_SIZE_BYTES} bytes，实际 $fileSize bytes")
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                LogUtils.w(TAG, "音频测试：检查文件大小操作被取消")
+                throw e
+            } catch (e: Exception) {
+                LogUtils.e(TAG, "音频测试：检查文件大小异常: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * 执行一轮音频测试循环操作
+     */
+    private fun executeAudioTestLoop() {
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            try {
+                LogUtils.i(TAG, "音频测试：开始执行循环操作")
+
+                // 1. 退出频道
+                LogUtils.i(TAG, "音频测试：退出频道")
+                leaveChannel()
+
+                // 等待退出完成
+                ensureActive()
+                delay(1000)
+                LogUtils.d(TAG, "音频测试：退出频道等待完成")
+
+                // 2. 执行 destroy
+                LogUtils.i(TAG, "音频测试：执行 destroy")
+                destroyEngine()
+
+                // 3. 删除日志文件
+                LogUtils.i(TAG, "音频测试：删除日志文件")
+                Utils.deleteFiles(LogUtils.getLogDir().absolutePath)
+                LogUtils.d(TAG, "音频测试：日志文件删除完成")
+
+                // 4. 等待 10 秒
+                val waitTimeMs = ExamplesConstants.AUTO_LOOP_WAIT_TIME_MS
+                LogUtils.i(
+                    TAG,
+                    "音频测试：等待 $waitTimeMs 毫秒（${waitTimeMs / 1000} 秒）后重新加入频道"
+                )
+                val startTime = System.currentTimeMillis()
+                delay(waitTimeMs)
+                val elapsedTime = System.currentTimeMillis() - startTime
+                LogUtils.i(TAG, "音频测试：等待完成，实际等待时间: $elapsedTime 毫秒")
+
+                // 6. 重新初始化并加入频道
+                LogUtils.i(TAG, "音频测试：重新初始化并加入频道")
+                runOnUiThread {
+                    joinChannel()
+                    // 更新测试时间显示
+                    updateTestTimeUI()
+                    LogUtils.i(
+                        TAG,
+                        "音频测试：循环操作完成，已启动重新加入频道流程，等待加入成功并接收音频数据..."
+                    )
+                }
+
+
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                LogUtils.w(TAG, "音频测试：协程被取消")
+                throw e
+            } catch (e: Exception) {
+                LogUtils.e(TAG, "音频测试：循环操作异常: ${e.message}", e)
+                runOnUiThread {
+                    showAudioTestError("测试循环异常: ${e.message}")
+                }
+            }
+        }
+    }
+
+
+    /**
+     * 显示音频测试错误信息
+     */
+    private fun showAudioTestError(message: String) {
+        LogUtils.e(TAG, "音频测试错误: $message")
+
+        // 计算测试总时间
+        var errorText = "错误: $message"
+        if (mAudioTestStartTime > 0) {
+            val totalTime = System.currentTimeMillis() - mAudioTestStartTime
+            val totalSeconds = totalTime / 1000
+            val totalMinutes = totalSeconds / 60
+            val remainingSeconds = totalSeconds % 60
+
+            // 格式化测试开始时间：年月日时分秒毫秒
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+            val startTimeText = dateFormat.format(Date(mAudioTestStartTime))
+
+            val timeText =
+                "\n测试开始时间: $startTimeText\n当前测试次数：$mAudioTestCount\n总测试时间: $totalMinutes 分 $remainingSeconds 秒（${totalTime} 毫秒）"
+            errorText += timeText
+            LogUtils.e(TAG, "音频测试错误: $message，$timeText")
+            mAudioTestStartTime = 0L // 重置开始时间
+        }
+
+        // 更新 UI
+        runOnUiThread {
+            binding.tvAudioTestInfo.text = errorText
+        }
+
+        // 可以在这里添加 UI 提示，比如 Toast 或 Dialog
+        // Toast.makeText(this, "音频测试错误: $message", Toast.LENGTH_LONG).show()
     }
 
 

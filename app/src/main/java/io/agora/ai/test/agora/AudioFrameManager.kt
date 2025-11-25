@@ -178,16 +178,16 @@ object AudioFrameManager {
 
         pts = pts or (basePts.toLong() and 0xFFFFL)
 
-        LogUtils.d(
-            TAG,
-            "generatePtsNew pts:$pts ${
-                String.format(
-                    "0x%016X",
-                    pts
-                )
-            } isAgora:${isAgora} version:${version} sessionId:$sessionId cmdType:$cmdType " +
-                    "cmdOrDataType:$cmdOrDataType sentenceId:${if (cmdOrDataType == 0) mSentenceId12 else -1} byteDataMs:${byteDataMs} basePts:$basePts"
-        )
+//        LogUtils.d(
+//            TAG,
+//            "generatePtsNew pts:$pts ${
+//                String.format(
+//                    "0x%016X",
+//                    pts
+//                )
+//            } isAgora:${isAgora} version:${version} sessionId:$sessionId cmdType:$cmdType " +
+//                    "cmdOrDataType:$cmdOrDataType sentenceId:${if (cmdOrDataType == 0) mSentenceId12 else -1} byteDataMs:${byteDataMs} basePts:$basePts"
+//        )
 
         // Advance counters
         if (cmdOrDataType == 0) {
@@ -333,7 +333,7 @@ object AudioFrameManager {
                 TAG,
                 "Session timeout for sessionId: $sessionId after ${SESSION_TIMEOUT_MS}ms"
             )
-            if (mCurrentSessionId == sessionId) {
+            if (mCurrentSessionId == sessionId && mLastEndedSessionId != sessionId) {
                 mCallback?.onSessionEnd(sessionId)
                 mLastEndedSessionId = sessionId
             }

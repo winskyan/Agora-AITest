@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 object RtcManager {
@@ -28,8 +29,8 @@ object RtcManager {
     private var mRtcEngine: RtcEngine? = null
     private var mCustomAudioTrackId = -1
 
-    private val mExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    private val mSingleThreadScope = CoroutineScope(mExecutor)
+    private var mExecutor: ExecutorService? = null
+    private var mSingleThreadScope: CoroutineScope? = null
 
     private var mRtcConnection: RtcConnection? = null
 
@@ -118,6 +119,11 @@ object RtcManager {
             LogUtils.i(TAG, "initialize error: already initialized")
             return Constants.ERR_OK
         }
+
+        // 创建 ExecutorService 和 CoroutineScope
+        mExecutor = Executors.newSingleThreadExecutor()
+        mSingleThreadScope = mExecutor?.let { CoroutineScope(it.asCoroutineDispatcher()) }
+        LogUtils.d(TAG, "RtcManager: Created new ExecutorService and CoroutineScope")
 
         mRtcEventCallback = eventCallback
 
@@ -211,7 +217,7 @@ object RtcManager {
         }
 
         mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
-            24000,
+            16000,
             1
         )
 
@@ -346,7 +352,7 @@ object RtcManager {
     }
 
     private fun saveAudioFrame(buffer: ByteArray) {
-        mSingleThreadScope.launch {
+        mSingleThreadScope?.launch {
             saveFile(mAudioFileName, buffer)
         }
     }
@@ -474,6 +480,14 @@ object RtcManager {
         (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
     }
 
+    /**
+     * 获取当前保存的音频文件路径
+     * @return 音频文件路径，如果未设置则返回空字符串
+     */
+    fun getAudioFileName(): String {
+        return mAudioFileName
+    }
+
     fun destroy() {
         if (mCustomAudioTrackId != -1) {
             mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
@@ -486,7 +500,16 @@ object RtcManager {
         mRtcEventCallback = null
         mAudioFileName = ""
 
-        mExecutor.close()
+        // 销毁 CoroutineScope 和 ExecutorService
+        mSingleThreadScope = null
+        mExecutor?.shutdown()
+        try {
+            mExecutor?.shutdownNow()
+        } catch (e: Exception) {
+            LogUtils.e(TAG, "Error shutting down executor: ${e.message}")
+        }
+        mExecutor = null
+        LogUtils.d(TAG, "RtcManager: Destroyed ExecutorService and CoroutineScope")
 
         LogUtils.d(TAG, "rtc destroy")
     }
