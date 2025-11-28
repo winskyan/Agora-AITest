@@ -41,7 +41,7 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var mChannelName = "wei1000"
+    private var mChannelName = "wei10071"
     private var mJoinSuccess = false
 
     private var mAudioFileReader: AudioFileReader? = null
@@ -129,6 +129,10 @@ class MainActivity : AppCompatActivity(), IRtcEventCallback {
 
         binding.btnStopSendAudio.setOnClickListener {
             stopSendAudio()
+        }
+
+        binding.btnSendStreamMessage.setOnClickListener {
+            RtcManager.sendStreamMessage("aaa".toByteArray())
         }
     }
 

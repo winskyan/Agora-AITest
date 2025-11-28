@@ -41,6 +41,8 @@ object RtcManager {
     private var mAudioFrameIndex = 0
     private var mFrameStartTime = 0L
 
+    private var mStreamMessageId = -1
+
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
 
         override fun onSessionStart(sessionId: Int) {
@@ -157,10 +159,16 @@ object RtcManager {
             mRtcEngine?.setAudioScenario(Constants.AUDIO_SCENARIO_AI_CLIENT)
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
+
+            //burst mode
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
-            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
+            //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
+
             setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+            if (ExamplesConstants.ENABLE_AUDIO_TEST) {
+                setAgoraRtcParameters("{\"rtc.vos_list\":[\"58.211.16.105:4063\"]}")
+            }
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
@@ -432,6 +440,8 @@ object RtcManager {
         try {
             mRtcEngine?.leaveChannel()
             AudioFrameManager.release()
+            mStreamMessageId = -1
+            mCustomAudioTrackId = -1
         } catch (e: Exception) {
             e.printStackTrace()
             LogUtils.e(
@@ -478,6 +488,27 @@ object RtcManager {
 
     fun sendAudioMetadataEx(data: ByteArray) {
         (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
+    }
+
+    fun sendStreamMessage(message: ByteArray): Int {
+        if (-1 == mStreamMessageId) {
+            mStreamMessageId = (mRtcEngine as RtcEngineEx).createDataStreamEx(
+                false,
+                false,
+                mRtcConnection
+            )
+            LogUtils.d(TAG, "createDataStreamEx mStreamMessageId:$mStreamMessageId")
+            if (-1 == mStreamMessageId) {
+                return -Constants.ERR_FAILED
+            }
+        }
+        val ret = (mRtcEngine as RtcEngineEx).sendStreamMessageEx(
+            mStreamMessageId,
+            message,
+            mRtcConnection
+        )
+        LogUtils.d(TAG, "sendStreamMessage ret:$ret message:${String(message)}")
+        return ret
     }
 
     /**
