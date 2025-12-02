@@ -14,14 +14,10 @@ import io.agora.rtc2.RtcEngineConfig.LogConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
 
 object RtcManager {
     private const val TAG = "${ExamplesConstants.TAG}-RtcManager"
@@ -29,8 +25,10 @@ object RtcManager {
     private var mRtcEngine: RtcEngine? = null
     private var mCustomAudioTrackId = -1
 
-    private var mExecutor: ExecutorService? = null
-    private var mSingleThreadScope: CoroutineScope? = null
+    // 替换原本的线程池，使用专用的写线程和阻塞队列
+    private val mAudioDataQueue = LinkedBlockingQueue<ByteArray>()
+    private var mWriteThread: Thread? = null
+    private @Volatile var mIsWriting = false
 
     private var mRtcConnection: RtcConnection? = null
 
@@ -122,10 +120,8 @@ object RtcManager {
             return Constants.ERR_OK
         }
 
-        // 创建 ExecutorService 和 CoroutineScope
-        mExecutor = Executors.newSingleThreadExecutor()
-        mSingleThreadScope = mExecutor?.let { CoroutineScope(it.asCoroutineDispatcher()) }
-        LogUtils.d(TAG, "RtcManager: Created new ExecutorService and CoroutineScope")
+        // 启动音频文件写入线程
+        startAudioWriteThread()
 
         mRtcEventCallback = eventCallback
 
@@ -160,10 +156,13 @@ object RtcManager {
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
 
+
             //burst mode
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
             //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
-            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
+            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":500}")
+            setAgoraRtcParameters("{\"rtc.remote_frame_expire_threshold\":30000}")
+            setAgoraRtcParameters("{\"rtc.vos_list\": [\"58.211.16.105:4070\"]}")
 
             setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
             if (ExamplesConstants.ENABLE_AUDIO_TEST) {
@@ -360,16 +359,55 @@ object RtcManager {
     }
 
     private fun saveAudioFrame(buffer: ByteArray) {
-        mSingleThreadScope?.launch {
-            saveFile(mAudioFileName, buffer)
+        if (mIsWriting) {
+            mAudioDataQueue.offer(buffer)
         }
     }
 
-    private fun saveFile(fileName: String, byteArray: ByteArray) {
-        val file = File(fileName)
-        FileOutputStream(file, true).use { outputStream ->
-            outputStream.write(byteArray)
+    private fun startAudioWriteThread() {
+        if (mIsWriting) return
+        mIsWriting = true
+        mWriteThread = Thread {
+            LogUtils.d(TAG, "Audio write thread started")
+            while (mIsWriting) {
+                try {
+                    // 使用 poll 带超时，避免一直阻塞无法退出，或者 take() 阻塞直到有数据
+                    // take() 是阻塞的，poll(timeout) 是带超时的
+                    // 这里使用 take() 比较简单，因为停止时我们可以 interrupt 或者 offer 一个特殊标记
+                    // 为了简单起见，使用 take() 配合 catch InterruptedException
+                    val data = mAudioDataQueue.take()
+                    if (data.isNotEmpty() && mAudioFileName.isNotEmpty()) {
+                        saveFile(mAudioFileName, data)
+                    }
+                } catch (e: InterruptedException) {
+                    LogUtils.d(TAG, "Audio write thread interrupted")
+                    break
+                } catch (e: Exception) {
+                    LogUtils.e(TAG, "Audio write error: ${e.message}")
+                }
+            }
+            LogUtils.d(TAG, "Audio write thread stopped")
+        }.apply {
+            name = "AudioWriterThread"
+            start()
+        }
+    }
 
+    private fun stopAudioWriteThread() {
+        mIsWriting = false
+        mWriteThread?.interrupt()
+        mWriteThread = null
+        mAudioDataQueue.clear()
+    }
+
+    private fun saveFile(fileName: String, byteArray: ByteArray) {
+        try {
+            val file = File(fileName)
+            FileOutputStream(file, true).use { outputStream ->
+                outputStream.write(byteArray)
+            }
+        } catch (e: Exception) {
+            LogUtils.e(TAG, "saveFile error: ${e.message}")
         }
     }
 
@@ -531,16 +569,9 @@ object RtcManager {
         mRtcEventCallback = null
         mAudioFileName = ""
 
-        // 销毁 CoroutineScope 和 ExecutorService
-        mSingleThreadScope = null
-        mExecutor?.shutdown()
-        try {
-            mExecutor?.shutdownNow()
-        } catch (e: Exception) {
-            LogUtils.e(TAG, "Error shutting down executor: ${e.message}")
-        }
-        mExecutor = null
-        LogUtils.d(TAG, "RtcManager: Destroyed ExecutorService and CoroutineScope")
+        // 停止音频写入线程
+        stopAudioWriteThread()
+        LogUtils.d(TAG, "RtcManager: Destroyed audio write thread")
 
         LogUtils.d(TAG, "rtc destroy")
     }
