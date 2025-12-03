@@ -14,21 +14,32 @@ import io.agora.rtc2.RtcEngineConfig.LogConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
 
 object RtcManager {
     private const val TAG = "${ExamplesConstants.TAG}-RtcManager"
 
+    // 音频帧数据封装类（内部类）
+    private data class AudioFrameData(
+        val buffer: ByteArray,
+        val channelId: String,
+        val presentationMs: Long
+    )
+
     private var mRtcEngine: RtcEngine? = null
     private var mCustomAudioTrackId = -1
 
-    // 替换原本的线程池，使用专用的写线程和阻塞队列
-    private val mAudioDataQueue = LinkedBlockingQueue<ByteArray>()
-    private var mWriteThread: Thread? = null
-    private @Volatile var mIsWriting = false
+    // 使用 Kotlin Channel 替代 LinkedBlockingQueue，更轻量级
+    private var mAudioDataChannel: Channel<AudioFrameData>? = null
+    private var mWriteJob: Job? = null
+    private val mWriteScope = CoroutineScope(Dispatchers.IO)
 
     private var mRtcConnection: RtcConnection? = null
 
@@ -40,6 +51,10 @@ object RtcManager {
     private var mFrameStartTime = 0L
 
     private var mStreamMessageId = -1
+
+    private var channelSendAudioCount = 0L
+    private var channelGetAudioCount = 0L
+    private var netSdkSendAudioCount = 0L
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
 
@@ -120,8 +135,8 @@ object RtcManager {
             return Constants.ERR_OK
         }
 
-        // 启动音频文件写入线程
-        startAudioWriteThread()
+        // 启动音频文件写入协程
+        startAudioWriteCoroutine()
 
         mRtcEventCallback = eventCallback
 
@@ -298,7 +313,6 @@ object RtcManager {
                 rtpTimestamp: Int,
                 presentationMs: Long
             ): Boolean {
-
                 // must get data synchronously and process data asynchronously
                 buffer?.rewind()
                 val byteArray = ByteArray(buffer?.remaining() ?: 0)
@@ -331,8 +345,27 @@ object RtcManager {
                     LogUtils.i(TAG, "onPlaybackAudioFrameBeforeMixing empty data")
                     return true
                 }
-                AudioFrameManager.processAudioFrame(byteArray, presentationMs)
-                saveAudioFrame(byteArray)
+
+                val sendResult = mAudioDataChannel?.trySend(
+                    AudioFrameData(
+                        byteArray,
+                        channelId ?: "",
+                        presentationMs
+                    )
+                )
+
+                if (sendResult?.isFailure == true) {
+                    LogUtils.w(
+                        TAG,
+                        "[frame fail]onPlaybackAudioFrameBeforeMixing trySend Failed to send audio frame to channel: ${sendResult.exceptionOrNull()?.message} pts:$presentationMs"
+                    )
+                    return true
+                }
+                channelSendAudioCount++
+                LogUtils.d(
+                    TAG,
+                    "[frame]onPlaybackAudioFrameBeforeMixing send audio channelSendAudioCount:$channelSendAudioCount mAudioFrameIndex:${mAudioFrameIndex} pts:$presentationMs"
+                )
                 return true
             }
 
@@ -358,46 +391,51 @@ object RtcManager {
         })
     }
 
-    private fun saveAudioFrame(buffer: ByteArray) {
-        if (mIsWriting) {
-            mAudioDataQueue.offer(buffer)
-        }
-    }
+    private fun startAudioWriteCoroutine() {
+        LogUtils.d(TAG, "startAudioWriteCoroutine")
+        channelSendAudioCount = 0L
+        channelGetAudioCount = 0L
+        netSdkSendAudioCount = 0L
 
-    private fun startAudioWriteThread() {
-        if (mIsWriting) return
-        mIsWriting = true
-        mWriteThread = Thread {
-            LogUtils.d(TAG, "Audio write thread started")
-            while (mIsWriting) {
-                try {
-                    // 使用 poll 带超时，避免一直阻塞无法退出，或者 take() 阻塞直到有数据
-                    // take() 是阻塞的，poll(timeout) 是带超时的
-                    // 这里使用 take() 比较简单，因为停止时我们可以 interrupt 或者 offer 一个特殊标记
-                    // 为了简单起见，使用 take() 配合 catch InterruptedException
-                    val data = mAudioDataQueue.take()
-                    if (data.isNotEmpty() && mAudioFileName.isNotEmpty()) {
-                        saveFile(mAudioFileName, data)
+        if (mAudioDataChannel != null) return
+
+        mAudioDataChannel = Channel(Channel.UNLIMITED)
+        mWriteJob = mWriteScope.launch {
+            LogUtils.d(TAG, "Audio write coroutine started")
+            try {
+                for (frameData in mAudioDataChannel!!) {
+                    if (frameData.buffer.isNotEmpty()) {
+                        channelGetAudioCount++
+                        LogUtils.d(
+                            TAG,
+                            "[frame]Audio write coroutine received audio frame channelGetAudioCount:$channelGetAudioCount pts:${frameData.presentationMs}"
+                        )
+                        AudioFrameManager.processAudioFrame(
+                            frameData.buffer,
+                            frameData.presentationMs
+                        )
+                        // 可以使用 frameData.channelId 和 frameData.presentationMs
+                        if (mAudioFileName.isNotEmpty()) {
+                            saveFile(mAudioFileName, frameData.buffer)
+                        }
                     }
-                } catch (e: InterruptedException) {
-                    LogUtils.d(TAG, "Audio write thread interrupted")
-                    break
-                } catch (e: Exception) {
-                    LogUtils.e(TAG, "Audio write error: ${e.message}")
                 }
+            } catch (e: Exception) {
+                LogUtils.d(TAG, "Audio write coroutine cancelled: ${e.message}")
             }
-            LogUtils.d(TAG, "Audio write thread stopped")
-        }.apply {
-            name = "AudioWriterThread"
-            start()
+            LogUtils.d(TAG, "Audio write coroutine stopped")
         }
     }
 
-    private fun stopAudioWriteThread() {
-        mIsWriting = false
-        mWriteThread?.interrupt()
-        mWriteThread = null
-        mAudioDataQueue.clear()
+    private fun stopAudioWriteCoroutine() {
+        LogUtils.d(TAG, "stopAudioWriteCoroutine")
+        mAudioDataChannel?.close()
+        mAudioDataChannel = null
+        mWriteJob?.cancel()
+        mWriteJob = null
+        channelSendAudioCount = 0L
+        channelGetAudioCount = 0L
+        netSdkSendAudioCount = 0L
     }
 
     private fun saveFile(fileName: String, byteArray: ByteArray) {
@@ -569,9 +607,9 @@ object RtcManager {
         mRtcEventCallback = null
         mAudioFileName = ""
 
-        // 停止音频写入线程
-        stopAudioWriteThread()
-        LogUtils.d(TAG, "RtcManager: Destroyed audio write thread")
+        // 停止音频写入协程
+        stopAudioWriteCoroutine()
+        LogUtils.d(TAG, "RtcManager: Destroyed audio write coroutine")
 
         LogUtils.d(TAG, "rtc destroy")
     }
