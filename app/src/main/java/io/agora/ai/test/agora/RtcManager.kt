@@ -147,6 +147,7 @@ object RtcManager {
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":150}")
+            setAgoraRtcParameters("{\"che.audio.neteq.dump_level\":1}")
             setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
