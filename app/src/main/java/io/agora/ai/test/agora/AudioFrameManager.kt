@@ -24,6 +24,7 @@ object AudioFrameManager {
     private var mBasePts16: Int = 0  // 16-bit base PTS
     private var mCurrentSessionId: Int = -1  // Track current active session
     private var mSessionTimeoutJob: Job? = null
+    private var mLastReceivedPts: Long = 0L  // 记录上次收到的 PTS，用于检测重复包
 
 
     // Track processed command packets to avoid duplicate callbacks
@@ -245,14 +246,17 @@ object AudioFrameManager {
         val currentPayload =
             SessionPayload(sessionId, cmdOrDataType, sentenceId, cmdType, sessionDurInPacks)
 
+        // 检查是否是重复包
+        val isDuplicatePacket = (pts == mLastReceivedPts)
+
         LogUtils.d(
             TAG,
-            "processAudioFrame version:$version currentPayload:$currentPayload  basePts:$basePts pts:$pts pts:${
+            "processAudioFrame version:$version currentPayload:$currentPayload basePts:$basePts pts:$pts pts:${
                 String.format(
                     "0x%016X",
                     pts
                 )
-            }"
+            } isDuplicate:$isDuplicatePacket"
         )
 
         // Handle session changes and commands
@@ -275,10 +279,23 @@ object AudioFrameManager {
             LogUtils.d(TAG, "New session started: $sessionId")
             mCurrentSessionId = sessionId
             mCallback?.onSessionStart(sessionId)
+            // 新 Session 开始，重启超时
             startSessionTimeout(sessionId)
+            mLastReceivedPts = pts
         } else {
-            // Same session - restart timeout
-            startSessionTimeout(sessionId)
+            // Same session
+            if (!isDuplicatePacket) {
+                // 收到不同的 PTS，重启超时计时器
+                LogUtils.d(TAG, "Received new PTS, restarting timeout for session $sessionId")
+                startSessionTimeout(sessionId)
+                mLastReceivedPts = pts
+            } else {
+                // 收到相同的 PTS（重复包），不重启超时计时器，让超时继续执行
+                LogUtils.w(
+                    TAG,
+                    "Received duplicate PTS: ${String.format("0x%016X", pts)}, timeout continues"
+                )
+            }
         }
 
         // Handle command packets - only process first packet for each session
@@ -356,6 +373,7 @@ object AudioFrameManager {
         mSentenceId12 = 0
         mBasePts16 = 0
         mCurrentSessionId = -1
+        mLastReceivedPts = 0L
         mLastEndCommandSessionId = -1
         mLastInterruptCommandSessionId = -1
         mLastEndedSessionId = -1
