@@ -582,7 +582,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                         publishMicrophoneTrack =
                             !joinChannelConfig.enableCustomDirectAudioTracker
                         enableAudioRecordingOrPlayout =
-                            joinChannelConfig.enableCustomDirectAudioTracker
+                            !joinChannelConfig.enableCustomDirectAudioTracker
                     }
                 }
                 if (joinChannelConfig.enableJoinChannelEx) {
