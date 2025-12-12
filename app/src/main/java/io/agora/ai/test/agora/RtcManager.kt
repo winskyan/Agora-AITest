@@ -25,96 +25,102 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
+/**
+ * RTC 管理器
+ * 负责 Agora RTC 引擎的初始化、频道管理、音频帧处理和协程管理
+ */
 object RtcManager {
     private const val TAG = "${ExamplesConstants.TAG}-RtcManager"
 
-    // 音频帧数据封装类（内部类）
+    // ========== 音频播放配置常量 ==========
+    private const val SAVE_AUDIO_CACHE_FRAME_COUNT = 20  // 缓存帧数阈值
+    private const val PLAYBACK_AUDIO_SAMPLE_RATE = 16000  // 播放采样率 16kHz
+    private const val PLAYBACK_AUDIO_CHANNELS = 1  // 播放声道数
+    private const val PLAYBACK_AUDIO_ONE_FRAME_TIME_MS = 10L  // 每帧时长 10ms
+    private const val PLAYBACK_AUDIO_FRAME_SIZE =
+        (PLAYBACK_AUDIO_SAMPLE_RATE * PLAYBACK_AUDIO_CHANNELS * 2 * PLAYBACK_AUDIO_ONE_FRAME_TIME_MS / 1000).toInt()
+
+    // ========== 内部数据类 ==========
+    /**
+     * 音频帧数据封装类
+     * @param buffer 音频数据
+     * @param channelId 频道 ID
+     * @param presentationMs PTS 时间戳
+     */
     private data class AudioFrameData(
         val buffer: ByteArray,
         val channelId: String,
         val presentationMs: Long
     )
 
+    // ========== RTC 引擎相关 ==========
     private var mRtcEngine: RtcEngine? = null
+    private var mRtcConnection: RtcConnection? = null
+    private var mRtcEventCallback: IRtcEventCallback? = null
     private var mCustomAudioTrackId = -1
+    private var mStreamMessageId = -1
 
-    // 双 Channel 架构：实时接收 + 播放缓冲
+    // ========== 协程和 Channel 相关 ==========
+    private val mWriteScopeJob = SupervisorJob()
+    private val mWriteScope = CoroutineScope(Dispatchers.IO + mWriteScopeJob)
     private var mAudioDataChannel: Channel<AudioFrameData>? = null  // 实时接收音频帧
     private var mPlaybackBufferChannel: Channel<ByteArray>? = null  // 播放缓冲队列
     private var mProcessJob: Job? = null  // 实时处理协程
     private var mPlaybackJob: Job? = null  // 定时播放协程
-    private val mWriteScopeJob = SupervisorJob()  // 协程作用域的 Job，用于统一取消
-    private val mWriteScope = CoroutineScope(Dispatchers.IO + mWriteScopeJob)
 
-    // 播放配置参数
-    private const val SAVE_AUDIO_CACHE_FRAME_COUNT = 20  // 缓存5帧后开始播放
-    private const val PLAYBACK_AUDIO_SAMPLE_RATE = 16000  // 播放采样率16kHz
-    private const val PLAYBACK_AUDIO_CHANNELS = 1  // 播放声道
-    private const val PLAYBACK_AUDIO_ONE_FRAME_TIME_MS = 10L  // 每帧10ms间隔
-    private const val PLAYBACK_AUDIO_FRAME_SIZE =
-        (PLAYBACK_AUDIO_SAMPLE_RATE * PLAYBACK_AUDIO_CHANNELS * 2 * PLAYBACK_AUDIO_ONE_FRAME_TIME_MS / 1000).toInt()  // 每帧大小
+    // ========== 状态变量 ==========
+    @Volatile
+    private var mIsPlaybackStarted = false  // 播放是否已开始
 
     @Volatile
-    private var mIsPlaybackStarted = false  // 播放是否已开始（多线程访问）
+    private var mShouldFillSilence = true  // 是否填充静音帧
 
     @Volatile
-    private var mShouldFillSilence = true  // 是否应该填充静音帧（Session End 后设为 false）
+    private var mAudioFileName = ""  // 音频文件名
 
-    @Volatile
-    private var mAudioFileName = ""  // 音频文件名（多线程访问）
-
-    private var mRtcConnection: RtcConnection? = null
-    private var mRtcEventCallback: IRtcEventCallback? = null
-
+    // ========== 统计变量 ==========
     private var mFrameStartTime = 0L
     private var playbackFrameCount = 0L
     private var channelSendAudioCount = 0L
     private var channelGetAudioCount = 0L
 
-    private var mStreamMessageId = -1
-
-
+    // ========== 回调接口 ==========
+    /**
+     * AudioFrameManager 回调
+     * 处理 Session 生命周期事件
+     */
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
-
         override fun onSessionStart(sessionId: Int) {
             LogUtils.i(TAG, "onSessionStart sessionId:$sessionId")
-            // Session 开始时，允许填充静音帧
             mShouldFillSilence = true
         }
 
         override fun onSessionEnd(sessionId: Int) {
             LogUtils.i(TAG, "onSessionEnd sessionId:$sessionId")
-
-            // Session 结束时，标记不再填充静音帧
-            // 但播放协程会继续运行，直到缓冲区数据播放完毕
             mShouldFillSilence = false
             LogUtils.d(
                 TAG,
                 "onSessionEnd: marked to stop filling silence, waiting for buffer drain"
             )
-
             mRtcEventCallback?.onPlaybackAudioFrameFinished()
         }
 
         override fun onSessionInterrupt(sessionId: Int) {
             LogUtils.i(TAG, "onSessionInterrupt sessionId:$sessionId")
-            // Session 中断时，也标记不再填充静音帧
             mShouldFillSilence = false
             LogUtils.d(TAG, "onSessionInterrupt: marked to stop filling silence")
         }
     }
 
-    private var mRtcEventHandler = object : IRtcEngineEventHandler() {
+    /**
+     * RTC 引擎事件回调
+     */
+    private val mRtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
-            LogUtils.d(
-                TAG,
-                "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed"
-            )
-
+            LogUtils.d(TAG, "onJoinChannelSuccess channel:$channel uid:$uid elapsed:$elapsed")
             if (mRtcConnection == null) {
                 mRtcConnection = RtcConnection(channel, uid)
             }
-
             mRtcEventCallback?.onJoinChannelSuccess(channel, uid, elapsed)
         }
 
@@ -139,8 +145,6 @@ object RtcManager {
                 TAG,
                 "onStreamMessage uid:$uid streamId:$streamId data:${String(data ?: ByteArray(0))}"
             )
-
-            // Metadata registration no longer required. Kept for compatibility: ignore.
         }
 
         override fun onUserMuteAudio(uid: Int, muted: Boolean) {
@@ -157,6 +161,14 @@ object RtcManager {
         }
     }
 
+    // ========== 公共 API ==========
+    /**
+     * 初始化 RTC 引擎
+     * @param context Android Context
+     * @param appId Agora App ID
+     * @param eventCallback 事件回调接口
+     * @return 错误码，0 表示成功
+     */
     fun initialize(context: Context, appId: String, eventCallback: IRtcEventCallback): Int {
         LogUtils.d(TAG, "RtcManager initialize")
         if (mRtcEngine != null) {
@@ -164,24 +176,24 @@ object RtcManager {
             return Constants.ERR_OK
         }
 
-        // 启动音频文件写入协程
         startAudioWriteCoroutine()
-
         mRtcEventCallback = eventCallback
 
         try {
             LogUtils.d(TAG, "RtcEngine version:" + RtcEngine.getSdkVersion())
+
+            // 配置 RTC 引擎
             val rtcEngineConfig = RtcEngineConfig()
             rtcEngineConfig.mContext = context
             rtcEngineConfig.mAppId = appId
-            rtcEngineConfig.mChannelProfile =
-                Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
+            rtcEngineConfig.mChannelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
             rtcEngineConfig.mEventHandler = mRtcEventHandler
 
+            // 配置日志
             val logConfig = LogConfig()
             logConfig.level = Constants.LOG_LEVEL_INFO
             try {
-                val agoraLogFile = java.io.File(LogUtils.getLogDir(), "agora_rtc.log")
+                val agoraLogFile = File(LogUtils.getLogDir(), "agora_rtc.log")
                 logConfig.filePath = agoraLogFile.absolutePath
                 logConfig.fileSizeInKB = 20480
                 LogUtils.d(TAG, "Agora log file: ${agoraLogFile.absolutePath}")
@@ -189,160 +201,308 @@ object RtcManager {
             }
             rtcEngineConfig.mLogConfig = logConfig
 
+            // 创建引擎
             mRtcEngine = RtcEngine.create(rtcEngineConfig)
 
+            // 设置音频配置
             if (ExamplesConstants.ENABLE_STEREO_AUDIO) {
                 mRtcEngine?.setAudioProfile(Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO)
             } else {
                 mRtcEngine?.setAudioProfile(Constants.AUDIO_PROFILE_DEFAULT)
             }
             mRtcEngine?.setAudioScenario(Constants.AUDIO_SCENARIO_AI_CLIENT)
+            mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
+            // 设置 RTC 参数
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
-
-
-            //burst mode
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
             //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":500}")
             setAgoraRtcParameters("{\"rtc.remote_frame_expire_threshold\":30000}")
             //setAgoraRtcParameters("{\"rtc.vos_list\": [\"58.211.16.105:4070\"]}")
-
             //setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+
             if (ExamplesConstants.ENABLE_AUDIO_TEST) {
                 setAgoraRtcParameters("{\"rtc.vos_list\":[\"58.211.16.105:4063\"]}")
             }
 
-            mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
-
-
-            LogUtils.d(
-                TAG, "initRtcEngine success"
-            )
-
             AudioFrameManager.init(mAudioFrameCallback)
+            LogUtils.d(TAG, "initRtcEngine success")
         } catch (e: Exception) {
             e.printStackTrace()
-            LogUtils.e(
-                TAG, "initRtcEngine error:" + e.message
-            )
+            LogUtils.e(TAG, "initRtcEngine error:" + e.message)
             return -Constants.ERR_FAILED
         }
         return Constants.ERR_OK
     }
 
+    /**
+     * 加入频道
+     * @param channelId 频道 ID
+     * @param userId 用户 ID
+     * @param rtcToken RTC Token
+     * @param roleType 角色类型
+     * @return 错误码，0 表示成功
+     */
+    fun joinChannelEx(channelId: String, userId: Int, rtcToken: String, roleType: Int): Int {
+        LogUtils.d(TAG, "joinChannelEx channelId:$channelId roleType:$roleType")
+        if (mRtcEngine == null) {
+            LogUtils.e(TAG, "joinChannelEx error: not initialized")
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+
+        try {
+            resetData()
+            registerAudioFrame()
+            initCustomAudioTracker()
+
+            mAudioFileName =
+                LogUtils.getLogDir().path + "/audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
+            LogUtils.d(TAG, "save audio file: $mAudioFileName")
+
+            val channelMediaOption = object : ChannelMediaOptions() {
+                init {
+                    autoSubscribeAudio = true
+                    autoSubscribeVideo = false
+                    clientRoleType = roleType
+                    publishCustomAudioTrack = true
+                    publishCustomAudioTrackId = mCustomAudioTrackId
+                    publishMicrophoneTrack = false
+                    enableAudioRecordingOrPlayout = false
+                }
+            }
+
+            mRtcConnection = RtcConnection(channelId, userId)
+            val ret = (mRtcEngine as RtcEngineEx).joinChannelEx(
+                rtcToken,
+                mRtcConnection,
+                channelMediaOption,
+                mRtcEventHandler
+            )
+
+            LogUtils.d(TAG, "joinChannelEx ret:$ret")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            LogUtils.e(TAG, "joinChannelEx error:" + e.message)
+            return -Constants.ERR_FAILED
+        }
+
+        return Constants.ERR_OK
+    }
+
+    /**
+     * 离开频道
+     * 会等待所有缓冲的音频数据播放完毕后再完全停止
+     * @return 错误码，0 表示成功
+     */
+    fun leaveChannel(): Int {
+        LogUtils.d(TAG, "leaveChannel")
+        if (mRtcEngine == null) {
+            LogUtils.e(TAG, "leaveChannel error: not initialized")
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+
+        try {
+            mRtcEngine?.leaveChannel()
+            stopAudioWriteCoroutineGracefully()
+            AudioFrameManager.release()
+            mStreamMessageId = -1
+            mCustomAudioTrackId = -1
+        } catch (e: Exception) {
+            e.printStackTrace()
+            LogUtils.e(TAG, "leaveChannel error:" + e.message)
+            return -Constants.ERR_FAILED
+        }
+
+        return Constants.ERR_OK
+    }
+
+    /**
+     * 推送外部音频帧
+     * @param data 音频数据
+     * @param sampleRate 采样率
+     * @param channels 声道数
+     * @param isSessionEnd 是否为 Session 结束标记
+     * @return 错误码，0 表示成功
+     */
+    fun pushExternalAudioFrame(
+        data: ByteArray,
+        sampleRate: Int,
+        channels: Int,
+        isSessionEnd: Boolean
+    ): Int {
+        if (mRtcEngine == null) {
+            LogUtils.e(TAG, "pushExternalAudioFrame error: not initialized")
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+        if (mCustomAudioTrackId == -1) {
+            return -Constants.ERR_NOT_INITIALIZED
+        }
+
+        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
+        val ret = mRtcEngine?.pushExternalAudioFrame(
+            data,
+            timestamp,
+            sampleRate,
+            channels,
+            Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
+            mCustomAudioTrackId
+        )
+
+        return if (ret == 0) {
+            Constants.ERR_OK
+        } else {
+            LogUtils.e(TAG, "pushExternalAudioFrame error: $ret")
+            -Constants.ERR_FAILED
+        }
+    }
+
+    /**
+     * 发送音频元数据
+     * @param data 元数据
+     */
+    fun sendAudioMetadataEx(data: ByteArray) {
+        (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
+    }
+
+    /**
+     * 发送流消息
+     * @param message 消息内容
+     * @return 错误码
+     */
+    fun sendStreamMessage(message: ByteArray): Int {
+        if (mStreamMessageId == -1) {
+            mStreamMessageId =
+                (mRtcEngine as RtcEngineEx).createDataStreamEx(false, false, mRtcConnection)
+            LogUtils.d(TAG, "createDataStreamEx mStreamMessageId:$mStreamMessageId")
+            if (mStreamMessageId == -1) {
+                return -Constants.ERR_FAILED
+            }
+        }
+
+        val ret = (mRtcEngine as RtcEngineEx).sendStreamMessageEx(
+            mStreamMessageId,
+            message,
+            mRtcConnection
+        )
+        LogUtils.d(TAG, "sendStreamMessage ret:$ret message:${String(message)}")
+        return ret
+    }
+
+    /**
+     * 获取当前保存的音频文件路径
+     * @return 音频文件路径
+     */
+    fun getAudioFileName(): String {
+        return mAudioFileName
+    }
+
+    /**
+     * 销毁 RTC 引擎
+     * 立即停止所有操作并释放资源
+     */
+    fun destroy() {
+        LogUtils.d(TAG, "RtcManager destroy")
+
+        if (mCustomAudioTrackId != -1) {
+            mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
+            mCustomAudioTrackId = -1
+        }
+
+        AudioFrameManager.release()
+        RtcEngine.destroy()
+
+        mRtcEngine = null
+        mRtcConnection = null
+        mRtcEventCallback = null
+        mAudioFileName = ""
+
+        stopAudioWriteCoroutine()
+        mWriteScopeJob.cancel()
+
+        LogUtils.d(TAG, "RtcManager destroyed")
+    }
+
+    // ========== 私有方法：RTC 配置 ==========
+    /**
+     * 设置 Agora RTC 参数
+     * @param parameters JSON 格式的参数字符串
+     */
     private fun setAgoraRtcParameters(parameters: String) {
         LogUtils.d(TAG, "setAgoraRtcParameters parameters:$parameters")
         if (mRtcEngine == null) {
             LogUtils.e(TAG, "setAgoraRtcParameters error: not initialized")
             return
         }
+
         val ret = mRtcEngine?.setParameters(parameters) ?: -1
         if (ret != 0) {
-            LogUtils.e(
-                TAG,
-                "setAgoraRtcParameters parameters:${parameters} error: $ret"
-            )
+            LogUtils.e(TAG, "setAgoraRtcParameters parameters:$parameters error: $ret")
         }
     }
 
+    /**
+     * 初始化自定义音频轨道
+     */
     private fun initCustomAudioTracker() {
         val audioTrackConfig = AudioTrackConfig()
         audioTrackConfig.enableLocalPlayback = false
         audioTrackConfig.enableAudioProcessing = false
+
         mCustomAudioTrackId = mRtcEngine?.createCustomAudioTrack(
             Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
             audioTrackConfig
         ) ?: 0
-        LogUtils.d(
-            TAG,
-            "createCustomAudioTrack mCustomAudioTrackId:$mCustomAudioTrackId"
-        )
+
+        LogUtils.d(TAG, "createCustomAudioTrack mCustomAudioTrackId:$mCustomAudioTrackId")
     }
 
-    private fun registerAudioFrame(
-    ) {
+    /**
+     * 注册音频帧观察器
+     */
+    private fun registerAudioFrame() {
         if (mRtcEngine == null) {
             LogUtils.e(TAG, "registerAudioFrame error: not initialized")
             return
         }
 
         mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
-            PLAYBACK_AUDIO_SAMPLE_RATE, PLAYBACK_AUDIO_CHANNELS/*,
-            (PLAYBACK_AUDIO_SAMPLE_RATE / 1000 * PLAYBACK_AUDIO_ONE_FRAME_TIME_MS).toInt()*/
+            PLAYBACK_AUDIO_SAMPLE_RATE,
+            PLAYBACK_AUDIO_CHANNELS
         )
 
         mRtcEngine?.registerAudioFrameObserver(object : IAudioFrameObserver {
             override fun onRecordAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return true
-            }
+                channelId: String?, type: Int, samplesPerChannel: Int,
+                bytesPerSample: Int, channels: Int, samplesPerSec: Int,
+                buffer: ByteBuffer?, renderTimeMs: Long, avsync_type: Int
+            ): Boolean = true
 
             override fun onPlaybackAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return true
-            }
+                channelId: String?, type: Int, samplesPerChannel: Int,
+                bytesPerSample: Int, channels: Int, samplesPerSec: Int,
+                buffer: ByteBuffer?, renderTimeMs: Long, avsync_type: Int
+            ): Boolean = true
 
             override fun onMixedAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return true
-            }
+                channelId: String?, type: Int, samplesPerChannel: Int,
+                bytesPerSample: Int, channels: Int, samplesPerSec: Int,
+                buffer: ByteBuffer?, renderTimeMs: Long, avsync_type: Int
+            ): Boolean = true
 
             override fun onEarMonitoringAudioFrame(
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return true
-            }
+                type: Int, samplesPerChannel: Int, bytesPerSample: Int,
+                channels: Int, samplesPerSec: Int, buffer: ByteBuffer?,
+                renderTimeMs: Long, avsync_type: Int
+            ): Boolean = true
 
             override fun onPlaybackAudioFrameBeforeMixing(
-                channelId: String?,
-                uid: Int,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int,
-                rtpTimestamp: Int,
-                presentationMs: Long
+                channelId: String?, uid: Int, type: Int, samplesPerChannel: Int,
+                bytesPerSample: Int, channels: Int, samplesPerSec: Int,
+                buffer: ByteBuffer?, renderTimeMs: Long, avsync_type: Int,
+                rtpTimestamp: Int, presentationMs: Long
             ): Boolean {
-                // must get data synchronously and process data asynchronously
+                // 同步获取数据
                 buffer?.rewind()
                 val byteArray = ByteArray(buffer?.remaining() ?: 0)
                 buffer?.get(byteArray)
@@ -351,21 +511,27 @@ object RtcManager {
                     mFrameStartTime = System.currentTimeMillis()
                 }
 
+                playbackFrameCount++
+
                 LogUtils.d(
                     TAG,
-                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp presentationMs:$presentationMs ${
-                        String.format(
-                            "0x%016X",
-                            presentationMs
-                        )
-                    } playbackFrameCount:$playbackFrameCount dataSize:${byteArray.size}"
+                    "onPlaybackAudioFrameBeforeMixing channelId:$channelId uid:$uid " +
+                            "renderTimeMs:$renderTimeMs rtpTimestamp:$rtpTimestamp " +
+                            "presentationMs:$presentationMs ${
+                                String.format(
+                                    "0x%016X",
+                                    presentationMs
+                                )
+                            } " +
+                            "playbackFrameCount:$playbackFrameCount dataSize:${byteArray.size}"
                 )
-                playbackFrameCount++
+
 
                 if ((playbackFrameCount % 50).toInt() == 0) {
                     LogUtils.d(
                         TAG,
-                        "onPlaybackAudioFrameBeforeMixing playbackFrameCount:$playbackFrameCount per 50 frame time:${System.currentTimeMillis() - mFrameStartTime}ms"
+                        "onPlaybackAudioFrameBeforeMixing playbackFrameCount:$playbackFrameCount " +
+                                "per 50 frame time:${System.currentTimeMillis() - mFrameStartTime}ms"
                     )
                     mFrameStartTime = System.currentTimeMillis()
                 }
@@ -375,51 +541,38 @@ object RtcManager {
                     return true
                 }
 
+                // 异步发送到 Channel
                 val sendResult = mAudioDataChannel?.trySend(
-                    AudioFrameData(
-                        byteArray,
-                        channelId ?: "",
-                        presentationMs
-                    )
+                    AudioFrameData(byteArray, channelId ?: "", presentationMs)
                 )
 
                 if (sendResult?.isFailure == true) {
                     LogUtils.w(
                         TAG,
-                        "[frame fail]onPlaybackAudioFrameBeforeMixing trySend Failed to send audio frame to channel: ${sendResult.exceptionOrNull()?.message} pts:$presentationMs"
+                        "[frame fail] trySend failed: ${sendResult.exceptionOrNull()?.message} pts:$presentationMs"
                     )
                     return true
                 }
+
                 channelSendAudioCount++
                 LogUtils.d(
                     TAG,
-                    "[frame]onPlaybackAudioFrameBeforeMixing send audio channelSendAudioCount:$channelSendAudioCount playbackFrameCount:${playbackFrameCount} pts:$presentationMs"
+                    "[frame] send audio channelSendAudioCount:$channelSendAudioCount " +
+                            "playbackFrameCount:$playbackFrameCount pts:$presentationMs"
                 )
+
                 return true
             }
 
-            override fun getObservedAudioFramePosition(): Int {
-                return 0
-            }
-
-            override fun getRecordAudioParams(): AudioParams {
-                return AudioParams(0, 0, 0, 0)
-            }
-
-            override fun getPlaybackAudioParams(): AudioParams {
-                return AudioParams(0, 0, 0, 0)
-            }
-
-            override fun getMixedAudioParams(): AudioParams {
-                return AudioParams(0, 0, 0, 0)
-            }
-
-            override fun getEarMonitoringAudioParams(): AudioParams {
-                return AudioParams(0, 0, 0, 0)
-            }
+            override fun getObservedAudioFramePosition(): Int = 0
+            override fun getRecordAudioParams(): AudioParams = AudioParams(0, 0, 0, 0)
+            override fun getPlaybackAudioParams(): AudioParams = AudioParams(0, 0, 0, 0)
+            override fun getMixedAudioParams(): AudioParams = AudioParams(0, 0, 0, 0)
+            override fun getEarMonitoringAudioParams(): AudioParams = AudioParams(0, 0, 0, 0)
         })
     }
 
+    // ========== 私有方法：协程管理 ==========
     /**
      * 启动音频处理协程（双协程架构）
      * 1. 实时处理协程：接收音频帧 -> processAudioFrame -> 放入播放缓冲
@@ -427,6 +580,7 @@ object RtcManager {
      */
     private fun startAudioWriteCoroutine() {
         LogUtils.d(TAG, "startAudioWriteCoroutine")
+
         channelSendAudioCount = 0L
         channelGetAudioCount = 0L
         mIsPlaybackStarted = false
@@ -434,8 +588,8 @@ object RtcManager {
         if (mAudioDataChannel != null) return
 
         // 创建双 Channel
-        mAudioDataChannel = Channel(Channel.UNLIMITED)  // 实时接收，无限容量
-        mPlaybackBufferChannel = Channel(Channel.UNLIMITED)  // 播放缓冲，无限容量
+        mAudioDataChannel = Channel(Channel.UNLIMITED)
+        mPlaybackBufferChannel = Channel(Channel.UNLIMITED)
 
         // 协程1：实时处理音频帧
         mProcessJob = mWriteScope.launch {
@@ -449,7 +603,7 @@ object RtcManager {
                             "[process] Received frame #$channelGetAudioCount, pts:${frameData.presentationMs}"
                         )
 
-                        // 实时处理音频帧（不阻塞）
+                        // 实时处理音频帧
                         AudioFrameManager.processAudioFrame(
                             frameData.buffer,
                             frameData.presentationMs
@@ -486,19 +640,17 @@ object RtcManager {
 
         mPlaybackJob = mWriteScope.launch {
             var localPlaybackFrameCount = 0L
-            val silentFrame = ByteArray(PLAYBACK_AUDIO_FRAME_SIZE)  // 静音帧（全0）
+            val silentFrame = ByteArray(PLAYBACK_AUDIO_FRAME_SIZE)
 
             try {
                 while (true) {
                     delay(PLAYBACK_AUDIO_ONE_FRAME_TIME_MS)
 
-                    // 尝试从缓冲读取一帧（非阻塞）
                     val frame = mPlaybackBufferChannel?.tryReceive()?.getOrNull()
 
                     if (frame != null) {
                         // 有数据，保存真实音频帧
                         localPlaybackFrameCount++
-
                         if (mAudioFileName.isNotEmpty()) {
                             saveFile(mAudioFileName, frame)
                         }
@@ -509,7 +661,7 @@ object RtcManager {
                     } else {
                         // 缓冲为空
                         if (mShouldFillSilence) {
-                            // Session 进行中，填充静音帧（无限制）
+                            // Session 进行中，填充静音帧
                             localPlaybackFrameCount++
                             if (mAudioFileName.isNotEmpty()) {
                                 saveFile(mAudioFileName, silentFrame)
@@ -519,12 +671,8 @@ object RtcManager {
                                 "[playback] Buffer empty! Saved silent frame #$localPlaybackFrameCount"
                             )
                         } else {
-                            // Session 已结束且缓冲为空，停止播放
-                            LogUtils.i(
-                                TAG,
-                                "[playback] Session ended and buffer drained, stopping gracefully"
-                            )
-                            break  // 优雅停止
+                            // Session 结束，停止播放
+                            break
                         }
                     }
                 }
@@ -542,19 +690,77 @@ object RtcManager {
         }
     }
 
-    private fun stopAudioWriteCoroutine() {
-        LogUtils.d(TAG, "stopAudioWriteCoroutine")
+    /**
+     * 优雅地停止音频写入协程（leaveChannel 时调用）
+     * 1. 关闭实时接收 Channel，停止接收新音频帧
+     * 2. 等待处理协程完成
+     * 3. 标记停止填充静音帧
+     * 4. 等待播放协程自然结束（缓冲区清空）
+     * 5. 清理所有资源
+     */
+    private fun stopAudioWriteCoroutineGracefully() {
+        LogUtils.d(TAG, "stopAudioWriteCoroutineGracefully: start")
 
-        // 先标记停止填充静音，让播放协程自然结束
+        // 步骤1: 关闭实时接收 Channel
+        mAudioDataChannel?.close()
+        LogUtils.d(TAG, "stopAudioWriteCoroutineGracefully: closed audio data channel")
+
+        // 步骤2-5: 在协程中等待完成并清理
+        mWriteScope.launch {
+            try {
+                // 等待处理协程完成
+                mProcessJob?.join()
+                LogUtils.d(TAG, "stopAudioWriteCoroutineGracefully: process job completed")
+            } catch (e: Exception) {
+                LogUtils.e(
+                    TAG,
+                    "stopAudioWriteCoroutineGracefully: process job error: ${e.message}"
+                )
+            }
+
+            // 标记停止填充静音帧
+            mShouldFillSilence = false
+            LogUtils.d(TAG, "stopAudioWriteCoroutineGracefully: marked to stop filling silence")
+
+            try {
+                // 等待播放协程自然结束
+                mPlaybackJob?.join()
+                LogUtils.d(TAG, "stopAudioWriteCoroutineGracefully: playback job completed")
+            } catch (e: Exception) {
+                LogUtils.e(
+                    TAG,
+                    "stopAudioWriteCoroutineGracefully: playback job error: ${e.message}"
+                )
+            }
+
+            // 清理所有资源
+            mAudioDataChannel = null
+            mPlaybackBufferChannel?.close()
+            mPlaybackBufferChannel = null
+            mProcessJob = null
+            mPlaybackJob = null
+            mIsPlaybackStarted = false
+            channelSendAudioCount = 0L
+            channelGetAudioCount = 0L
+
+            LogUtils.i(TAG, "stopAudioWriteCoroutineGracefully: completed, all audio saved")
+        }
+    }
+
+    /**
+     * 强制停止音频写入协程（destroy 时调用）
+     * 立即取消所有协程，不等待缓冲区清空
+     */
+    private fun stopAudioWriteCoroutine() {
+        LogUtils.d(TAG, "stopAudioWriteCoroutine: force stop")
+
         mShouldFillSilence = false
 
-        // 关闭 Channel（会导致协程的 for 循环退出）
         mAudioDataChannel?.close()
         mAudioDataChannel = null
         mPlaybackBufferChannel?.close()
         mPlaybackBufferChannel = null
 
-        // 取消协程（强制停止，防止泄漏）
         mProcessJob?.cancel()
         mProcessJob = null
         mPlaybackJob?.cancel()
@@ -565,6 +771,12 @@ object RtcManager {
         channelGetAudioCount = 0L
     }
 
+    // ========== 私有方法：工具函数 ==========
+    /**
+     * 保存音频数据到文件
+     * @param fileName 文件路径
+     * @param byteArray 音频数据
+     */
     private fun saveFile(fileName: String, byteArray: ByteArray) {
         try {
             val file = File(fileName)
@@ -576,180 +788,14 @@ object RtcManager {
         }
     }
 
-    fun joinChannelEx(
-        channelId: String,
-        userId: Int,
-        rtcToken: String,
-        roleType: Int
-    ): Int {
-        LogUtils.d(
-            TAG,
-            "joinChannelEx channelId:$channelId roleType:$roleType"
-        )
-        if (mRtcEngine == null) {
-            LogUtils.e(TAG, "joinChannelEx error: not initialized")
-            return -Constants.ERR_NOT_INITIALIZED
-        }
-        try {
-            resetData()
-
-            registerAudioFrame()
-            initCustomAudioTracker()
-
-            mAudioFileName =
-                LogUtils.getLogDir().path + "/audio_" + channelId + "_" + userId + "_" + System.currentTimeMillis() + ".pcm"
-            LogUtils.d(TAG, "save audio file: $mAudioFileName")
-
-            val channelMediaOption = object : ChannelMediaOptions() {
-                init {
-                    autoSubscribeAudio = true
-                    autoSubscribeVideo = false
-                    clientRoleType = roleType
-                    publishCustomAudioTrack = true
-                    publishCustomAudioTrackId = mCustomAudioTrackId
-                    publishMicrophoneTrack = false
-                    enableAudioRecordingOrPlayout = false
-                }
-            }
-            mRtcConnection = RtcConnection(channelId, userId)
-            val ret = (mRtcEngine as RtcEngineEx).joinChannelEx(
-                rtcToken,
-                mRtcConnection,
-                channelMediaOption,
-                mRtcEventHandler
-            )
-
-
-            LogUtils.d(
-                TAG, "joinChannelEx ret:$ret"
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
-            LogUtils.e(
-                TAG, "joinChannelEx error:" + e.message
-            )
-            return -Constants.ERR_FAILED
-        }
-
-        return Constants.ERR_OK
-    }
-
-    fun leaveChannel(): Int {
-        LogUtils.d(TAG, "leaveChannel")
-        if (mRtcEngine == null) {
-            LogUtils.e(TAG, "leaveChannel error: not initialized")
-            return -Constants.ERR_NOT_INITIALIZED
-        }
-        try {
-            mRtcEngine?.leaveChannel()
-            AudioFrameManager.release()
-            mStreamMessageId = -1
-            mCustomAudioTrackId = -1
-        } catch (e: Exception) {
-            e.printStackTrace()
-            LogUtils.e(
-                TAG, "leaveChannel error:" + e.message
-            )
-            return -Constants.ERR_FAILED
-        }
-        return Constants.ERR_OK
-    }
-
-    fun pushExternalAudioFrame(
-        data: ByteArray,
-        sampleRate: Int,
-        channels: Int,
-        isSessionEnd: Boolean
-    ): Int {
-        if (mRtcEngine == null) {
-            LogUtils.e(
-                TAG,
-                "pushExternalVideoFrameByIdInternal error: not initialized"
-            )
-            return -Constants.ERR_NOT_INITIALIZED
-        }
-        if (mCustomAudioTrackId == -1) {
-            return -Constants.ERR_NOT_INITIALIZED
-        }
-        val timestamp = AudioFrameManager.generatePts(data, sampleRate, channels, isSessionEnd)
-        val ret = mRtcEngine?.pushExternalAudioFrame(
-            data,
-            timestamp,
-            sampleRate,
-            channels,
-            Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
-            mCustomAudioTrackId
-        )
-
-        return if (ret == 0) {
-            Constants.ERR_OK
-        } else {
-            LogUtils.e(TAG, "pushExternalAudioFrame error: $ret")
-            -Constants.ERR_FAILED
-        }
-    }
-
-    fun sendAudioMetadataEx(data: ByteArray) {
-        (mRtcEngine as RtcEngineEx).sendAudioMetadataEx(data, mRtcConnection)
-    }
-
-    fun sendStreamMessage(message: ByteArray): Int {
-        if (-1 == mStreamMessageId) {
-            mStreamMessageId = (mRtcEngine as RtcEngineEx).createDataStreamEx(
-                false,
-                false,
-                mRtcConnection
-            )
-            LogUtils.d(TAG, "createDataStreamEx mStreamMessageId:$mStreamMessageId")
-            if (-1 == mStreamMessageId) {
-                return -Constants.ERR_FAILED
-            }
-        }
-        val ret = (mRtcEngine as RtcEngineEx).sendStreamMessageEx(
-            mStreamMessageId,
-            message,
-            mRtcConnection
-        )
-        LogUtils.d(TAG, "sendStreamMessage ret:$ret message:${String(message)}")
-        return ret
-    }
-
     /**
-     * 获取当前保存的音频文件路径
-     * @return 音频文件路径，如果未设置则返回空字符串
+     * 重置统计数据
      */
-    fun getAudioFileName(): String {
-        return mAudioFileName
-    }
-
-    fun destroy() {
-        if (mCustomAudioTrackId != -1) {
-            mRtcEngine?.destroyCustomAudioTrack(mCustomAudioTrackId)
-            mCustomAudioTrackId = -1
-        }
-        AudioFrameManager.release()
-        RtcEngine.destroy()
-        mRtcEngine = null
-        mRtcConnection = null
-        mRtcEventCallback = null
-        mAudioFileName = ""
-
-        // 停止音频写入协程
-        stopAudioWriteCoroutine()
-
-        // 取消整个协程作用域，确保所有协程都被停止
-        mWriteScopeJob.cancel()
-        LogUtils.d(TAG, "RtcManager: Destroyed audio write coroutine and cancelled scope")
-
-        LogUtils.d(TAG, "rtc destroy")
-    }
-
     private fun resetData() {
         mFrameStartTime = 0L
         playbackFrameCount = 0L
         channelSendAudioCount = 0L
         channelGetAudioCount = 0L
-
         mIsPlaybackStarted = false
         mShouldFillSilence = true
     }
