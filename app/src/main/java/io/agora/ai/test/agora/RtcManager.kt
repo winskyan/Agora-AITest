@@ -219,6 +219,7 @@ object RtcManager {
             //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
             setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":500}")
             setAgoraRtcParameters("{\"rtc.remote_frame_expire_threshold\":30000}")
+            //setAgoraRtcParameters("{\"che.audio.neteq.dump_level\":1}")
             //setAgoraRtcParameters("{\"rtc.vos_list\": [\"58.211.16.105:4070\"]}")
             //setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
