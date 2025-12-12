@@ -268,8 +268,8 @@ object RtcManager {
         }
 
         mRtcEngine?.setPlaybackAudioFrameBeforeMixingParameters(
-            PLAYBACK_AUDIO_SAMPLE_RATE, PLAYBACK_AUDIO_CHANNELS,
-            (PLAYBACK_AUDIO_SAMPLE_RATE / 1000 * PLAYBACK_AUDIO_ONE_FRAME_TIME_MS).toInt()
+            PLAYBACK_AUDIO_SAMPLE_RATE, PLAYBACK_AUDIO_CHANNELS/*,
+            (PLAYBACK_AUDIO_SAMPLE_RATE / 1000 * PLAYBACK_AUDIO_ONE_FRAME_TIME_MS).toInt()*/
         )
 
         mRtcEngine?.registerAudioFrameObserver(object : IAudioFrameObserver {

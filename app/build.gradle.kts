@@ -112,5 +112,6 @@ dependencies {
     implementation(libs.commons.codec)
     implementation(libs.gson)
 
-    implementation(libs.agora.rtc)
+//    implementation(libs.agora.rtc)
+    implementation(libs.agora.rtc.cy)
 }
