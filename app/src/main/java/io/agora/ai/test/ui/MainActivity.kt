@@ -805,12 +805,27 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         Log.d(TAG, message)
         runOnUiThread {
             binding.tvHistory.append("\r\n$message")
-            val scrollAmount =
-                binding.tvHistory.layout.getLineTop(binding.tvHistory.lineCount) - binding.tvHistory.height
-            if (scrollAmount > 0) {
-                binding.tvHistory.scrollTo(0, scrollAmount)
+            val layoutNow = binding.tvHistory.layout
+            if (layoutNow == null) {
+                // 视图尚未完成布局（如键盘弹起触发布局变更），延迟到下一帧再滚动，避免 NPE
+                binding.tvHistory.post {
+                    val layoutPost = binding.tvHistory.layout ?: return@post
+                    val scrollAmount =
+                        layoutPost.getLineTop(binding.tvHistory.lineCount) - binding.tvHistory.height
+                    if (scrollAmount > 0) {
+                        binding.tvHistory.scrollTo(0, scrollAmount)
+                    } else {
+                        binding.tvHistory.scrollTo(0, 0)
+                    }
+                }
             } else {
-                binding.tvHistory.scrollTo(0, 0)
+                val scrollAmount =
+                    layoutNow.getLineTop(binding.tvHistory.lineCount) - binding.tvHistory.height
+                if (scrollAmount > 0) {
+                    binding.tvHistory.scrollTo(0, scrollAmount)
+                } else {
+                    binding.tvHistory.scrollTo(0, 0)
+                }
             }
             writeMessageToFile(message)
         }
