@@ -42,17 +42,11 @@ object AudioFrameManager {
     private var mBasePts32: Long = 0L  // 32-bit base PTS (v2 protocol)
 
     // ========== Session Tracking State ==========
-    // Common state (shared by v2 and v8)
     private var mLastReceivedPts: Long = 0L  // Last received PTS (for duplicate detection)
     private var mLastEndedSessionId: Int = -1  // Last ended session ID (avoid duplicate callbacks)
     private var mLastPayload: SessionPayload? =
         null  // Last session payload (for protocol state tracking)
 
-    // v8 protocol state
-    private var mCurrentSessionId: Int = -1  // Current active session ID
-    private var mLastEndCommandSessionId: Int = -1  // Last session ID that received end command
-    private var mLastInterruptCommandSessionId: Int =
-        -1  // Last session ID that received interrupt command
 
     // ========== Data Classes ==========
     /**
@@ -396,10 +390,12 @@ object AudioFrameManager {
         )
 
         // Handle session change
-        handleSessionChange(sessionId, mCurrentSessionId, "V8")
+        val oldSessionId = mLastPayload?.sessionId
+        mLastPayload = currentPayload  // Update last payload for v8 protocol
+        handleSessionChange(sessionId, oldSessionId)
 
         // Handle timeout logic
-        handleTimeoutRestart(isDuplicatePacket, pts, sessionId, true)
+        handleTimeoutRestart(isDuplicatePacket, pts, sessionId)
 
         // Handle command packets
         if (cmdOrDataType == 1) {
@@ -407,44 +403,6 @@ object AudioFrameManager {
         }
     }
 
-    /**
-     * Set session ID
-     * @param sessionId Session ID (0-255)
-     */
-    @Synchronized
-    fun setSessionId(sessionId: Int) {
-        val safeSessionId = sessionId and 0xFF
-        mSessionId8 = safeSessionId
-        mSentenceId12 = 0  // Reset sentence counter
-        LogUtils.d(TAG, "setSessionId: $mSessionId8")
-    }
-
-    /**
-     * Release resources
-     */
-    @Synchronized
-    fun release() {
-        LogUtils.d(TAG, "AudioFrameManager release")
-
-        // Cancel all coroutines
-        mSessionTimeoutJob?.cancel()
-        mSessionTimeoutJob = null
-        mAudioFrameFinishJob?.cancel()
-        mAudioFrameFinishJob = null
-
-        // Close executor
-        try {
-            mExecutor.close()
-        } catch (e: Exception) {
-            LogUtils.e(TAG, "release: executor close error: ${e.message}")
-        }
-
-        // Clear callback
-        mCallback = null
-
-        // Reset all state
-        resetState()
-    }
 
     // ========== Private Methods: v2 Protocol Specific ==========
     /**
@@ -497,22 +455,19 @@ object AudioFrameManager {
         // Handle session change
         val oldSessionId = previousPayload?.sessionId
         if (previousPayload == null || previousPayload.sessionId != sessionId) {
-            handleSessionChange(sessionId, oldSessionId, "V2")
-            handleTimeoutRestart(false, pts, sessionId, false)  // Always restart timeout on session change
+            handleSessionChange(sessionId, oldSessionId)
+            handleTimeoutRestart(
+                false,
+                pts,
+                sessionId
+            )  // Always restart timeout on session change
             return
         }
 
         // Handle session end
         if (isSessionEnd) {
             LogUtils.d(TAG, "V2: session end detected for session $sessionId")
-            if (!isSessionEnded(sessionId)) {
-                try {
-                    mCallback?.onSessionEnd(sessionId)
-                } catch (e: Exception) {
-                    LogUtils.e(TAG, "processAudioFrameV2: onSessionEnd error: ${e.message}")
-                }
-                mLastEndedSessionId = sessionId
-            }
+            callbackOnSessionEnd(sessionId)
             // Session ended, cancel timeout and update PTS
             mAudioFrameFinishJob?.cancel()
             updateLastReceivedPts(pts)
@@ -520,7 +475,7 @@ object AudioFrameManager {
         }
 
         // Handle duplicate packet detection for timeout restart
-        handleTimeoutRestart(isDuplicatePacket, pts, sessionId, false)
+        handleTimeoutRestart(isDuplicatePacket, pts, sessionId)
     }
 
     /**
@@ -533,20 +488,10 @@ object AudioFrameManager {
                 val delayTime =
                     if (mLastPayload?.isSessionEnd == true) SESSION_TIMEOUT_MIN_MS else SESSION_TIMEOUT_MS
                 delay(delayTime)
-                LogUtils.d(TAG, "V2: Session timeout after ${delayTime}ms")
+                LogUtils.d(TAG, "Session timeout after ${delayTime}ms")
                 synchronized(this@AudioFrameManager) {
-                    val sessionId = mLastPayload?.sessionId
-                    if (sessionId != null && !isSessionEnded(sessionId)) {
-                        try {
-                            mCallback?.onSessionEnd(sessionId)
-                        } catch (e: Exception) {
-                            LogUtils.e(
-                                TAG,
-                                "startAudioFrameFinishTimeout: onSessionEnd error: ${e.message}"
-                            )
-                        }
-                        mLastEndedSessionId = sessionId
-                    }
+                    val sessionId = mLastPayload?.sessionId ?: return@synchronized
+                    callbackOnSessionEnd(sessionId)
                 }
             } catch (e: Exception) {
                 LogUtils.e(TAG, "startAudioFrameFinishTimeout error: ${e.message}")
@@ -554,15 +499,26 @@ object AudioFrameManager {
         }
     }
 
+    /**
+     * Set session ID
+     * @param sessionId Session ID (0-255)
+     */
+    @Synchronized
+    fun setSessionId(sessionId: Int) {
+        val safeSessionId = sessionId and 0xFF
+        mSessionId8 = safeSessionId
+        mSentenceId12 = 0  // Reset sentence counter
+        LogUtils.d(TAG, "setSessionId: $mSessionId8")
+    }
+
 
     // ========== Private Methods: Common Utilities ==========
     /**
      * Handle session change (common for v2 and v8 protocols)
      * @param newSessionId The new session ID
-     * @param oldSessionId The old session ID (null for first session or v8 using mCurrentSessionId)
-     * @param protocolName Protocol name for logging ("V2" or "V8")
+     * @param oldSessionId The old session ID (null for first session)
      */
-    private fun handleSessionChange(newSessionId: Int, oldSessionId: Int?, protocolName: String) {
+    private fun handleSessionChange(newSessionId: Int, oldSessionId: Int?) {
         // Check if session unchanged
         if (oldSessionId == newSessionId) {
             return
@@ -570,29 +526,14 @@ object AudioFrameManager {
 
         // Handle old session end
         if (oldSessionId != null && oldSessionId != -1) {
-            if (!isSessionEnded(oldSessionId)) {
-                LogUtils.d(TAG, "$protocolName: Session changed from $oldSessionId to $newSessionId")
-                try {
-                    mCallback?.onSessionEnd(oldSessionId)
-                } catch (e: Exception) {
-                    LogUtils.e(TAG, "handleSessionChange: onSessionEnd error: ${e.message}")
-                }
-                mLastEndedSessionId = oldSessionId
-            } else {
-                LogUtils.d(
-                    TAG,
-                    "$protocolName: Session changed from $oldSessionId to $newSessionId (already ended)"
-                )
-            }
+            LogUtils.d(TAG, "Session changed from $oldSessionId to $newSessionId")
+            callbackOnSessionEnd(oldSessionId)
         } else {
             // First session
-            LogUtils.d(TAG, "$protocolName: First session started: $newSessionId")
+            LogUtils.d(TAG, "First session started: $newSessionId")
         }
 
         // Start new session
-        if (protocolName == "V8") {
-            mCurrentSessionId = newSessionId
-        }
         try {
             mCallback?.onSessionStart(newSessionId)
         } catch (e: Exception) {
@@ -605,30 +546,30 @@ object AudioFrameManager {
      * @param isDuplicatePacket Whether the current packet is a duplicate
      * @param pts Current PTS value
      * @param sessionId Current session ID
-     * @param isV8Protocol Whether this is v8 protocol (true) or v2 protocol (false)
      */
     private fun handleTimeoutRestart(
         isDuplicatePacket: Boolean,
         pts: Long,
-        sessionId: Int,
-        isV8Protocol: Boolean
+        sessionId: Int
     ) {
         if (!isDuplicatePacket) {
             // Received new PTS, restart timeout timer
-            val protocolName = if (isV8Protocol) "V8" else "V2"
-            LogUtils.d(TAG, "$protocolName: Received new PTS, restarting timeout for session $sessionId")
-            if (isV8Protocol) {
-                startSessionTimeout(sessionId)
-            } else {
-                startAudioFrameFinishTimeout()
-            }
+            LogUtils.d(
+                TAG,
+                "Received new PTS, restarting timeout for session $sessionId"
+            )
+            startAudioFrameFinishTimeout()
             updateLastReceivedPts(pts)
         } else {
             // Received duplicate packet, do not restart timeout timer
-            val protocolName = if (isV8Protocol) "V8" else "V2"
             LogUtils.w(
                 TAG,
-                "$protocolName: Received duplicate PTS: ${String.format("0x%016X", pts)}, timeout continues"
+                "Received duplicate PTS: ${
+                    String.format(
+                        "0x%016X",
+                        pts
+                    )
+                }, timeout continues"
             )
         }
     }
@@ -639,58 +580,32 @@ object AudioFrameManager {
      * Handle command packets (v8 protocol)
      */
     private fun handleCommandPacketV8(sessionId: Int, cmdType: Int, sessionDurInPacks: Int) {
+        // Cancel timeout for any command packet
+        mSessionTimeoutJob?.cancel()
+
+        // Check if session already ended (avoid duplicate callbacks)
+        if (isSessionEnded(sessionId)) {
+            LogUtils.d(
+                TAG,
+                "V8: Ignoring command (type=$cmdType) for already ended session $sessionId"
+            )
+            return
+        }
+
         when (cmdType) {
             1 -> {
                 // Session end command
-                if (mLastEndCommandSessionId != sessionId) {
-                    LogUtils.d(
-                        TAG,
-                        "V8: Session end command: session=$sessionId, duration=$sessionDurInPacks packets"
-                    )
-                    mLastEndCommandSessionId = sessionId
-                    mSessionTimeoutJob?.cancel()
-                    if (!isSessionEnded(sessionId)) {
-                        try {
-                            mCallback?.onSessionEnd(sessionId)
-                        } catch (e: Exception) {
-                            LogUtils.e(
-                                TAG,
-                                "handleCommandPacketV8: onSessionEnd error: ${e.message}"
-                            )
-                        }
-                        mLastEndedSessionId = sessionId
-                    }
-                } else {
-                    LogUtils.d(
-                        TAG,
-                        "V8: Ignoring duplicate session end command for session $sessionId"
-                    )
-                }
+                LogUtils.d(
+                    TAG,
+                    "V8: Session end command: session=$sessionId, duration=$sessionDurInPacks packets"
+                )
+                callbackOnSessionEnd(sessionId)
             }
 
             2 -> {
                 // Session interrupt command
-                if (mLastInterruptCommandSessionId != sessionId) {
-                    LogUtils.d(TAG, "V8: Session interrupt command: session=$sessionId")
-                    mLastInterruptCommandSessionId = sessionId
-                    mSessionTimeoutJob?.cancel()
-                    if (!isSessionEnded(sessionId)) {
-                        try {
-                            mCallback?.onSessionInterrupt(sessionId)
-                        } catch (e: Exception) {
-                            LogUtils.e(
-                                TAG,
-                                "handleCommandPacketV8: onSessionInterrupt error: ${e.message}"
-                            )
-                        }
-                        mLastEndedSessionId = sessionId
-                    }
-                } else {
-                    LogUtils.d(
-                        TAG,
-                        "V8: Ignoring duplicate session interrupt command for session $sessionId"
-                    )
-                }
+                LogUtils.d(TAG, "V8: Session interrupt command: session=$sessionId")
+                callbackOnSessionInterrupt(sessionId)
             }
 
             else -> {
@@ -710,14 +625,6 @@ object AudioFrameManager {
     }
 
     /**
-     * Mark session as ended and update last received PTS
-     */
-    private fun markSessionEnded(sessionId: Int, pts: Long) {
-        mLastEndedSessionId = sessionId
-        mLastReceivedPts = pts
-    }
-
-    /**
      * Update last received PTS (for duplicate detection)
      */
     private fun updateLastReceivedPts(pts: Long) {
@@ -725,29 +632,35 @@ object AudioFrameManager {
     }
 
     /**
-     * Start or restart session timeout timer (v8 protocol)
+     * Callback for session end with error handling
+     * @param sessionId Session ID to end
      */
-    private fun startSessionTimeout(sessionId: Int) {
-        mSessionTimeoutJob?.cancel()
-        mSessionTimeoutJob = mSingleThreadScope.launch {
-            try {
-                delay(SESSION_TIMEOUT_MS)
-                LogUtils.d(TAG, "Session timeout: session=$sessionId after ${SESSION_TIMEOUT_MS}ms")
-                synchronized(this@AudioFrameManager) {
-                    if (mCurrentSessionId == sessionId && !isSessionEnded(sessionId)) {
-                        try {
-                            mCallback?.onSessionEnd(sessionId)
-                        } catch (e: Exception) {
-                            LogUtils.e(TAG, "startSessionTimeout: onSessionEnd error: ${e.message}")
-                        }
-                        mLastEndedSessionId = sessionId
-                    }
-                }
-            } catch (e: Exception) {
-                LogUtils.d(TAG, "Session timeout cancelled: ${e.message}")
-            }
+    private fun callbackOnSessionEnd(sessionId: Int) {
+        if (mLastEndedSessionId == sessionId) {
+            LogUtils.d(TAG, "Session $sessionId already ended, skipping callback")
+            return
         }
+        try {
+            mCallback?.onSessionEnd(sessionId)
+        } catch (e: Exception) {
+            LogUtils.e(TAG, "onSessionEnd error: ${e.message}")
+        }
+        mLastEndedSessionId = sessionId
     }
+
+    private fun callbackOnSessionInterrupt(sessionId: Int) {
+        if (mLastEndedSessionId == sessionId) {
+            LogUtils.d(TAG, "Session $sessionId already ended, skipping interrupt callback")
+            return
+        }
+        try {
+            mCallback?.onSessionInterrupt(sessionId)
+        } catch (e: Exception) {
+            LogUtils.e(TAG, "onSessionInterrupt error: ${e.message}")
+        }
+        mLastEndedSessionId = sessionId
+    }
+
 
     /**
      * Reset all state
@@ -762,12 +675,36 @@ object AudioFrameManager {
         mSessionId8 = 0
         mSentenceId12 = 0
         mBasePts16 = 0
-        mCurrentSessionId = -1
-        mLastEndCommandSessionId = -1
-        mLastInterruptCommandSessionId = -1
 
         // v2 protocol state
         mSessionId18 = 1
         mBasePts32 = 0L
+    }
+
+    /**
+     * Release resources
+     */
+    @Synchronized
+    fun release() {
+        LogUtils.d(TAG, "AudioFrameManager release")
+
+        // Cancel all coroutines
+        mSessionTimeoutJob?.cancel()
+        mSessionTimeoutJob = null
+        mAudioFrameFinishJob?.cancel()
+        mAudioFrameFinishJob = null
+
+        // Close executor
+        try {
+            mExecutor.close()
+        } catch (e: Exception) {
+            LogUtils.e(TAG, "release: executor close error: ${e.message}")
+        }
+
+        // Clear callback
+        mCallback = null
+
+        // Reset all state
+        resetState()
     }
 }
