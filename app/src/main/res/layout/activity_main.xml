@@ -32,15 +32,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
-    <Button
-        android:id="@+id/btn_send_audio_metadata"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/send_audio_metadata"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_join" />
-
-
     <EditText
         android:id="@+id/et_channel_name"
         android:layout_width="0dp"
@@ -51,6 +42,49 @@
         app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toEndOf="@id/btn_join"
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
+
+    <Button
+        android:id="@+id/btn_send_audio_metadata"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/send_audio_metadata"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_join" />
+
+    <Button
+        android:id="@+id/btn_stop_send_audio"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/stop_send_audio"
+        app:layout_constraintStart_toEndOf="@id/btn_send_audio_metadata"
+        app:layout_constraintTop_toBottomOf="@id/btn_join" />
+
+    <Button
+        android:id="@+id/btn_send_stream_message"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/send_stream_message"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_send_audio_metadata" />
+
+    <TextView
+        android:id="@+id/tv_audio_test_info"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="10dp"
+        android:background="@android:color/transparent"
+        android:maxLines="5"
+        android:padding="8dp"
+        android:scrollbars="vertical"
+        android:text=""
+        android:textColor="@color/purple_700"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_send_stream_message" />
+
 
     <TextView
         android:id="@+id/tv_sdk_version"

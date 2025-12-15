@@ -2,6 +2,7 @@ package io.agora.ai.test.utils
 
 import android.content.Context
 import android.util.Log
+import io.agora.ai.test.constants.ExamplesConstants
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -14,7 +15,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 object LogUtils {
-    private const val DEFAULT_TAG = "AgoraAITest"
+    private const val DEFAULT_TAG = ExamplesConstants.TAG + "-LogUtils"
 
     @Volatile
     private var initialized: Boolean = false
@@ -110,6 +111,8 @@ object LogUtils {
         } catch (_: Throwable) {
         }
     }
+
+
 }
 
 
