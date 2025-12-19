@@ -1,6 +1,7 @@
 package io.agora.ai.test.ui
 
 import android.Manifest
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Bundle
@@ -105,6 +106,12 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         checkPermissions()
         initData()
         initView()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 处理屏幕旋转等配置变化,但不重新创建Activity
+        Log.d(TAG, "onConfigurationChanged: orientation=${newConfig.orientation}")
     }
 
     private fun initWriter() {
@@ -342,6 +349,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     enableWriteRecordingAudioFrame = DemoContext.enableWriteRecordingAudioFrame
                     enableDelayPlayback = DemoContext.enableDelayPlayback
                     delayFrameCount = DemoContext.delayFrameCount
+                    enableRegisterVideoFrameObserver = true
                 }
                 mMaaSEngine?.joinChannel(
                     channelName,

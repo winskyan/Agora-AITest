@@ -28,6 +28,7 @@ import io.agora.rtc2.audio.AudioParams
 import io.agora.rtc2.audio.AudioTrackConfig
 import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.AgoraMetadata
+import io.agora.rtc2.video.IVideoFrameObserver
 import io.agora.rtc2.video.VideoEncoderConfiguration
 import io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions
 import kotlinx.coroutines.CoroutineScope
@@ -544,6 +545,65 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         })
     }
 
+    private fun registerVideoFrame() {
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "registerVideoFrame error: not initialized")
+            return
+        }
+
+        mRtcEngine?.registerVideoFrameObserver(object : IVideoFrameObserver {
+            override fun onCaptureVideoFrame(
+                sourceType: Int,
+                videoFrame: VideoFrame?
+            ): Boolean {
+                return true
+            }
+
+            override fun onPreEncodeVideoFrame(
+                sourceType: Int,
+                videoFrame: VideoFrame?
+            ): Boolean {
+                return true
+            }
+
+            override fun onMediaPlayerVideoFrame(
+                videoFrame: VideoFrame?,
+                mediaPlayerId: Int
+            ): Boolean {
+                return true
+            }
+
+            override fun getVideoFrameProcessMode(): Int {
+                return IVideoFrameObserver.PROCESS_MODE_READ_WRITE
+            }
+
+            override fun getVideoFormatPreference(): Int {
+                return IVideoFrameObserver.VIDEO_PIXEL_DEFAULT
+            }
+
+            override fun getRotationApplied(): Boolean {
+                return true
+            }
+
+            override fun getMirrorApplied(): Boolean {
+                return false
+            }
+
+            override fun getObservedFramePosition(): Int {
+                return IVideoFrameObserver.POSITION_POST_CAPTURER
+            }
+
+            override fun onRenderVideoFrame(
+                channelId: String?,
+                uid: Int,
+                videoFrame: VideoFrame?
+            ): Boolean {
+                return true
+            }
+
+        })
+    }
+
     override fun joinChannel(
         channelId: String,
         roleType: Int,
@@ -650,7 +710,9 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             joinChannelConfig.enableDelayPlayback, joinChannelConfig.delayFrameCount
         )
 
-
+        if (joinChannelConfig.enableRegisterVideoFrameObserver) {
+            registerVideoFrame()
+        }
 
         if (joinChannelConfig.enablePushExternalVideo) {
             mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
