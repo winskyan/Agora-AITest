@@ -18,7 +18,7 @@ object DemoContext {
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_PROFILE, value)
 
     var audioScenario: Int
-        get() = MMKVUtils.getInt(Constants.MMKV_KEY_AUDIO_SCENARIO, 7)
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_AUDIO_SCENARIO, 10)
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_SCENARIO, value)
 
     var enableAudio: Boolean
@@ -30,7 +30,7 @@ object DemoContext {
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_VIDEO, value)
 
     var enableRtm: Boolean
-        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_RTM, true)
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_RTM, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_RTM, value)
 
     var enableStereoTest: Boolean
@@ -42,14 +42,14 @@ object DemoContext {
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_SAVE_AUDIO, value)
 
     var enableTestRtcDataStreamMessage: Boolean
-        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE, true)
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE, false)
         set(value) = MMKVUtils.putBoolean(
             Constants.MMKV_KEY_ENABLE_TEST_RTC_DATA_STREAM_MESSAGE,
             value
         )
 
     var enableTestRtmMessage: Boolean
-        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTM_MESSAGE, true)
+        get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTM_MESSAGE, false)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_TEST_RTM_MESSAGE, value)
 
     var enableTestRtcAudioMetadata: Boolean
