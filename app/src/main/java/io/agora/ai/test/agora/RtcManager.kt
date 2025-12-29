@@ -40,10 +40,16 @@ object RtcManager {
 
     private var mAudioFrameIndex = 0
     private var mFrameStartTime = 0L
+    private var mPreFrameTime = 0L
 
     private var mStreamId = -1
 
     private var mHandlePts = false
+
+    private var mIncrementalModeFirstSuccess = false
+    private var mIncrementalModeSecondSuccess = false
+    private var mIncrementalModeTotalFrameSuccess = false
+    private var mHandleSessionEnd = false
 
     private val mAudioFrameCallback = object : AudioFrameManager.ICallback {
         override fun onSentenceEnd(
@@ -57,7 +63,7 @@ object RtcManager {
                 TAG,
                 "onSentenceEnd sessionId:$sessionId sentenceId:$sentenceId chunkId:$chunkId isSessionEnd:$isSessionEnd"
             )
-            if (isSessionEnd) {
+            if (mHandleSessionEnd && isSessionEnd) {
                 mRtcEventCallback?.onPlaybackAudioFrameFinished()
                 CoroutineScope(mExecutor).launch {
                     mHandlePts = true
@@ -104,14 +110,43 @@ object RtcManager {
             )
 
             val message = data?.let { String(it) } ?: ""
-            if (message == ExamplesConstants.TEST_TASK_SEND_PCM_AI_WITH_PTS || message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS) {
+            if (message == ExamplesConstants.TEST_TASK_SEND_PCM_AI_WITH_PTS || message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS
+                || message == ExamplesConstants.TEST_TASK_SEND_PCM_INCREMENTAL_MODE
+            ) {
                 CoroutineScope(mExecutor).launch {
+                    mHandleSessionEnd = false
+                    mAudioFrameIndex = 0
                     mHandlePts = true
+                    mIncrementalModeFirstSuccess = false
+                    mIncrementalModeSecondSuccess = false
+                    mIncrementalModeTotalFrameSuccess = false
+
+                    if (message == ExamplesConstants.TEST_TASK_SEND_PCM_AI_WITH_PTS || message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS) {
+                        mHandleSessionEnd = true
+                    }
+
                     sendStreamMessage(ExamplesConstants.TEST_START.toByteArray())
 
                     if (message == ExamplesConstants.TEST_TASK_RECEIVE_PCM_AI_WITH_PTS) {
                         delay(1000)
                         mRtcEventCallback?.onPushExternalAudioFrameStart()
+                    }
+                }
+            } else if (message == ExamplesConstants.TEST_TASK_SEND_PCM_INCREMENTAL_MODE_FINISHED) {
+                CoroutineScope(mExecutor).launch {
+                    mIncrementalModeTotalFrameSuccess = mAudioFrameIndex < 2800
+                    LogUtils.d(
+                        TAG,
+                        "onStreamMessage: TEST_TASK_SEND_PCM_INCREMENTAL_MODE_FINISHED  delay 1s and send TEST_PASS mIncrementalModeFirstSuccess:$mIncrementalModeFirstSuccess mIncrementalModeSecondSuccess:$mIncrementalModeSecondSuccess mIncrementalModeTotalFrameSuccess:$mIncrementalModeTotalFrameSuccess"
+                    )
+                    delay(1000)
+                    if (mIncrementalModeFirstSuccess && mIncrementalModeSecondSuccess && mIncrementalModeTotalFrameSuccess) {
+                        sendStreamMessage(ExamplesConstants.TEST_PASS.toByteArray())
+                    } else {
+                        LogUtils.e(
+                            TAG,
+                            "onStreamMessage: TEST_TASK_SEND_PCM_INCREMENTAL_MODE_FINISHED  fail delay 1s and send TEST_PASS mIncrementalModeFirstSuccess:$mIncrementalModeFirstSuccess mIncrementalModeSecondSuccess:$mIncrementalModeSecondSuccess mIncrementalModeTotalFrameSuccess:$mIncrementalModeTotalFrameSuccess"
+                        )
                     }
                 }
             }
@@ -157,9 +192,10 @@ object RtcManager {
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
             setAgoraRtcParameters("{\"che.audio.get_burst_mode\":true}")
-            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":0}")
-            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":0}")
-            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
+            //setAgoraRtcParameters("{\"che.audio.neteq.max_wait_first_decode_ms\":40}")
+            setAgoraRtcParameters("{\"che.audio.neteq.max_wait_ms\":500}")
+            setAgoraRtcParameters("{\"rtc.remote_frame_expire_threshold\":30000}")
+//            setAgoraRtcParameters("{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}")
 
             mRtcEngine?.setDefaultAudioRoutetoSpeakerphone(true)
 
@@ -299,6 +335,18 @@ object RtcManager {
                 if (mFrameStartTime == 0L) {
                     mFrameStartTime = System.currentTimeMillis()
                 }
+
+                if (mPreFrameTime != 0L) {
+                    val now = System.currentTimeMillis()
+                    val diff = now - mPreFrameTime
+                    if (diff < 5) {
+                        mIncrementalModeFirstSuccess = true
+                    } else if (diff >= 10) {
+                        mIncrementalModeSecondSuccess = true
+                    }
+                }
+
+                mPreFrameTime = System.currentTimeMillis()
 
                 LogUtils.d(
                     TAG,
