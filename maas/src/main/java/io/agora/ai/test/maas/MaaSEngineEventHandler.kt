@@ -25,4 +25,7 @@ interface MaaSEngineEventHandler {
         customType: String,
         timestamp: Long
     )
+
+    fun onMetadataReceived(channelId: String, uid: Int, metadata: ByteArray?, timeStampMs: Long)
+
 }

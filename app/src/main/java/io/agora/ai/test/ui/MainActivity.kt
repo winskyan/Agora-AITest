@@ -784,6 +784,14 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     }
 
+    override fun onMetadataReceived(channelId: String, uid: Int, metadata: ByteArray?, timeStampMs: Long) {
+        Log.d(
+            TAG,
+            "onMetadataReceived channelId:$channelId uid:$uid metadata:$metadata timeStampMs:$timeStampMs"
+        )
+        updateHistoryUI("ReceiveMetadata:${java.lang.String(metadata)}")
+    }
+
     private fun captureScreenToByteBuffer(view: View): ByteBuffer {
         // 创建一个与视图大小相同的 Bitmap
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)

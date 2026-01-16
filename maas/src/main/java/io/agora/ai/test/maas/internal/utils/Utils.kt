@@ -4,6 +4,9 @@ import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.internal.EncryptionConfig
 import io.agora.rtc2.video.VideoEncoderConfiguration
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object Utils {
     private val HEX_ARRAY: CharArray = "0123456789ABCDEF".toCharArray()
@@ -83,5 +86,9 @@ object Utils {
             hexChars[i * 2 + 1] = HEX_ARRAY[v and 0x0F]
         }
         return kotlin.text.String(hexChars)
+    }
+
+    fun getCurrentDateStr(pattern: String): String {
+        return SimpleDateFormat(pattern, Locale.getDefault()).format(Date())
     }
 }

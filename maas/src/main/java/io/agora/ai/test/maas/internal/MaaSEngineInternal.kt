@@ -604,6 +604,42 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         })
     }
 
+    private fun registerMediaMetadataObserver() {
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "registerMediaMetadataObserver error: not initialized")
+            return
+        }
+
+        val ret = mRtcEngine?.registerMediaMetadataObserver(object : IMetadataObserver {
+            override fun getMaxMetadataSize(): Int {
+                return "yyyyMMdd_HHmmss".toByteArray().size
+            }
+
+            override fun onReadyToSendMetadata(timeStampMs: Long, sourceType: Int): ByteArray {
+                return Utils.getCurrentDateStr("yyyyMMdd_HHmmss").toByteArray()
+
+            }
+
+            override fun onMetadataReceived(metadata: AgoraMetadata?) {
+                Log.d(
+                    MaaSConstants.TAG,
+                    "onMetadataReceived channelId:${metadata?.channelId},uid:${metadata?.uid},data:${metadata?.data?.contentToString()},timeStampMs:${metadata?.timeStampMs}"
+                )
+                metadata?.let {
+                    mEventCallback?.onMetadataReceived(
+                        it.channelId,
+                        it.uid,
+                        it.data,
+                        it.timeStampMs
+                    )
+                }
+
+            }
+        }, IMetadataObserver.VIDEO_METADATA);
+
+        Log.d(MaaSConstants.TAG, "registerMediaMetadataObserver ret:$ret")
+    }
+
     override fun joinChannel(
         channelId: String,
         roleType: Int,
@@ -713,6 +749,8 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         if (joinChannelConfig.enableRegisterVideoFrameObserver) {
             registerVideoFrame()
         }
+
+        registerMediaMetadataObserver()
 
         if (joinChannelConfig.enablePushExternalVideo) {
             mVideoTrackerId = mRtcEngine?.createCustomVideoTrack() ?: 0
