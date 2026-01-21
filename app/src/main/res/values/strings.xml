@@ -19,6 +19,7 @@
     <string name="params">Params</string>
     <string name="audio_profile">AudioProfile</string>
     <string name="audio_scenario">AudioScenario</string>
+    <string name="codec_type">CodecType</string>
     <string name="enable_rtm">Enable Rtm</string>
     <string name="enable_stereo_test">Enable Stereo Test</string>
     <string name="enable_save_audio">Enable Save Audio</string>

@@ -4,6 +4,7 @@ import android.content.Context
 import io.agora.ai.test.maas.MaaSConstants
 import io.agora.ai.test.maas.MaaSEngineEventHandler
 import io.agora.rtc2.Constants
+import io.agora.rtc2.video.VideoEncoderConfiguration
 
 class MaaSEngineConfiguration(
     var context: Context?,
@@ -26,6 +27,7 @@ class MaaSEngineConfiguration(
     var params: List<String>,
     var audioProfile: Int,
     var audioScenario: Int,
+    var codecType: Int,
     var enableRtm: Boolean = false
 ) {
     constructor() : this(
@@ -47,12 +49,13 @@ class MaaSEngineConfiguration(
         params = emptyList<String>(),
         audioProfile = Constants.AUDIO_PROFILE_DEFAULT,
         audioScenario = Constants.AUDIO_SCENARIO_CHORUS,
+        codecType = VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_H265.value,
         enableRtm = false
     ) {
 
     }
 
     override fun toString(): String {
-        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtmUserId=${rtmUserId},rtcToken='$rtcToken', rtmToken='$rtmToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario , enableRtm=$enableRtm)"
+        return "MaaSEngineConfiguration(context=$context, eventHandler=$eventHandler, enableConsoleLog=$enableConsoleLog, enableSaveLogToFile=$enableSaveLogToFile, appId='$appId', userId=$userId, rtmUserId=${rtmUserId},rtcToken='$rtcToken', rtmToken='$rtmToken', enableMultiTurnShortTermMemory=$enableMultiTurnShortTermMemory, userName='$userName', agentVoiceName='$agentVoiceName', input=$input, output=$output, vadConfiguration=$vadConfiguration, noiseEnvironment=$noiseEnvironment, speechRecognitionCompletenessLevel=$speechRecognitionCompletenessLevel, params=$params, audioProfile=$audioProfile, audioScenario=$audioScenario, codecType=$codecType, enableRtm=$enableRtm)"
     }
 }

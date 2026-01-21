@@ -8,5 +8,7 @@ data class Config(
     @SerializedName("audioProfile")
     val audioProfile: List<Map<String, Int>>,
     @SerializedName("audioScenario")
-    val audioScenario: List<Map<String, Int>>
+    val audioScenario: List<Map<String, Int>>,
+    @SerializedName("codecType")
+    val codecType: List<Map<String, Int>>
 )

@@ -200,6 +200,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             mRtcEngine?.setAudioScenario(configuration.audioScenario)
 
             setAgoraRtcParameters("{\"rtc.enable_debug_log\":true}")
+            setAgoraRtcParameters("{\"che.video.videoCodecIndex\":${configuration.codecType - 1}}")
 
             for (params in configuration.params) {
                 setAgoraRtcParameters(params)
@@ -911,7 +912,24 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             Log.e(MaaSConstants.TAG, "startVideo error: not initialized")
             return MaaSConstants.ERROR_NOT_INITIALIZED
         }
-        var ret = mRtcEngine?.enableVideo()
+        val config = VideoEncoderConfiguration()
+        val codecType = when (mMaaSEngineConfiguration?.codecType) {
+            1 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_VP8
+            2 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_H264
+            3 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_H265
+            6 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_GENERIC
+            12 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_AV1
+            13 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_VP9
+            20 -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_GENERIC_JPEG
+            else -> VideoEncoderConfiguration.VIDEO_CODEC_TYPE.VIDEO_CODEC_H264
+        }
+        config.codecType = codecType
+        Log.d(MaaSConstants.TAG, "setVideoEncoderConfiguration codecType:$codecType")
+        var ret = mRtcEngine?.setVideoEncoderConfiguration(config)
+        Log.d(
+            MaaSConstants.TAG, "setVideoEncoderConfiguration ret:$ret"
+        )
+        ret = mRtcEngine?.enableVideo()
         Log.d(
             MaaSConstants.TAG, "enableVideo ret:$ret"
         )

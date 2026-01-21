@@ -61,5 +61,28 @@
     {
       "ai_client": 10
     }
+  ],
+  "codecType": [
+    {
+      "VIDEO_CODEC_VP8": 1
+    },
+    {
+      "VIDEO_CODEC_H264": 2
+    },
+    {
+      "VIDEO_CODEC_H265": 3
+    },
+    {
+      "VIDEO_CODEC_GENERIC": 6
+    },
+    {
+      "VIDEO_CODEC_AV1": 12
+    },
+    {
+      "VIDEO_CODEC_VP9": 13
+    },
+    {
+      "VIDEO_CODEC_GENERIC_JPEG": 20
+    }
   ]
 }

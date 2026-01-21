@@ -195,8 +195,10 @@ object SettingsDialog {
 
                     val audioProfileLayout = binding.audioProfileLayout
                     val audioScenarioLayout = binding.audioScenarioLayout
+                    val codecTypeLayout = binding.codecTypeLayout
                     createRadioButtons(audioProfileLayout, context, config.audioProfile, true)
                     createRadioButtons(audioScenarioLayout, context, config.audioScenario, false)
+                    createRadioButtons(codecTypeLayout, context, config.codecType, false, true)
 
                     // --- App ID Mode Handling --- START
                     val predefinedAppIds = resources.getStringArray(R.array.predefined_app_ids)
@@ -398,7 +400,8 @@ object SettingsDialog {
         constraintLayout: ConstraintLayout,
         context: Context,
         options: List<Map<String, Int>>,
-        isProfile: Boolean
+        isProfile: Boolean,
+        isCodecType: Boolean = false
     ) {
         val radioGroup = RadioGroup(context).apply {
             id = View.generateViewId()
@@ -410,14 +413,17 @@ object SettingsDialog {
                 val radioButton = RadioButton(context).apply {
                     id = View.generateViewId()
                     text = key + ":" + value
-                    isChecked =
-                        isProfile && DemoContext.audioProfile == value || !isProfile && DemoContext.audioScenario == value
+                    isChecked = when {
+                        isProfile -> DemoContext.audioProfile == value
+                        isCodecType -> DemoContext.codecType == value
+                        else -> DemoContext.audioScenario == value
+                    }
                     setOnCheckedChangeListener { _, isChecked ->
                         if (isChecked) {
-                            if (isProfile) {
-                                DemoContext.audioProfile = value
-                            } else {
-                                DemoContext.audioScenario = value
+                            when {
+                                isProfile -> DemoContext.audioProfile = value
+                                isCodecType -> DemoContext.codecType = value
+                                else -> DemoContext.audioScenario = value
                             }
                         }
                     }

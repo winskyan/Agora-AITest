@@ -21,6 +21,10 @@ object DemoContext {
         get() = MMKVUtils.getInt(Constants.MMKV_KEY_AUDIO_SCENARIO, 10)
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_AUDIO_SCENARIO, value)
 
+    var codecType: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_CODEC_TYPE, 3)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_CODEC_TYPE, value)
+
     var enableAudio: Boolean
         get() = MMKVUtils.getBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, true)
         set(value) = MMKVUtils.putBoolean(Constants.MMKV_KEY_ENABLE_AUDIO, value)

@@ -231,6 +231,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         if (DemoContext.audioScenario != -1) {
             configuration.audioScenario = DemoContext.audioScenario
         }
+        if (DemoContext.codecType != -1) {
+            configuration.codecType = DemoContext.codecType
+        }
 
         val ret = mMaaSEngine?.initialize(configuration)
         if (ret != 0) {
