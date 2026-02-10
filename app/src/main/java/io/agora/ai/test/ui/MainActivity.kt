@@ -253,8 +253,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             )
 
             mMaaSEngine?.setVideoEncoderConfiguration(
-                640,
-                480,
+                DemoContext.videoEncoderWidth,
+                DemoContext.videoEncoderHeight,
                 MaaSConstants.FrameRate.FRAME_RATE_FPS_15,
                 MaaSConstants.OrientationMode.FIXED_LANDSCAPE,
                 false
@@ -333,8 +333,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     )
 
                     mMaaSEngine?.setVideoEncoderConfiguration(
-                        640,
-                        480,
+                        DemoContext.videoEncoderWidth,
+                        DemoContext.videoEncoderHeight,
                         MaaSConstants.FrameRate.FRAME_RATE_FPS_15,
                         MaaSConstants.OrientationMode.FIXED_LANDSCAPE,
                         false
@@ -389,8 +389,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                 )
 
                 mMaaSEngine?.setVideoEncoderConfiguration(
-                    640,
-                    480,
+                    DemoContext.videoEncoderWidth,
+                    DemoContext.videoEncoderHeight,
                     MaaSConstants.FrameRate.FRAME_RATE_FPS_15,
                     MaaSConstants.OrientationMode.FIXED_LANDSCAPE,
                     false

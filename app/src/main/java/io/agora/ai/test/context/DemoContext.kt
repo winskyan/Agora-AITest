@@ -129,6 +129,14 @@ object DemoContext {
         get() = MMKVUtils.getInt(Constants.MMKV_KEY_DELAY_FRAME_COUNT, 100)
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_DELAY_FRAME_COUNT, value)
 
+    var videoEncoderWidth: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_VIDEO_ENCODER_WIDTH, 1920)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_VIDEO_ENCODER_WIDTH, value)
+
+    var videoEncoderHeight: Int
+        get() = MMKVUtils.getInt(Constants.MMKV_KEY_VIDEO_ENCODER_HEIGHT, 720)
+        set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_VIDEO_ENCODER_HEIGHT, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,

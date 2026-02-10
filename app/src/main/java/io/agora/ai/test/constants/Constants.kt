@@ -31,6 +31,8 @@ object Constants {
     const val MMKV_KEY_ENABLE_DELAY_PLAYBACK = "enableDelayPlayback"
     const val MMKV_KEY_DELAY_FRAME_COUNT = "delayFrameCount"
     const val MMKV_KEY_CODEC_TYPE = "codecType"
+    const val MMKV_KEY_VIDEO_ENCODER_WIDTH = "videoEncoderWidth"
+    const val MMKV_KEY_VIDEO_ENCODER_HEIGHT = "videoEncoderHeight"
 
     const val APP_ID_MODE_MANUAL = 0
     const val APP_ID_MODE_SELECT = 1

@@ -266,6 +266,48 @@
                     app:layout_constraintBottom_toBottomOf="@id/enable_delay_playback_cb"
                     app:layout_constraintStart_toEndOf="@id/enable_delay_playback_cb"
                     app:layout_constraintTop_toTopOf="@id/enable_delay_playback_cb" />
+
+                <TextView
+                    android:id="@+id/video_encoder_width_tv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/video_encoder_width"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/enable_delay_playback_cb" />
+
+                <EditText
+                    android:id="@+id/video_encoder_width_et"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    app:layout_constraintBottom_toBottomOf="@id/video_encoder_width_tv"
+                    app:layout_constraintStart_toEndOf="@id/video_encoder_width_tv"
+                    app:layout_constraintTop_toTopOf="@id/video_encoder_width_tv" />
+
+                <TextView
+                    android:id="@+id/video_encoder_height_tv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/video_encoder_height"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/video_encoder_width_tv" />
+
+                <EditText
+                    android:id="@+id/video_encoder_height_et"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    app:layout_constraintBottom_toBottomOf="@id/video_encoder_height_tv"
+                    app:layout_constraintStart_toEndOf="@id/video_encoder_height_tv"
+                    app:layout_constraintTop_toTopOf="@id/video_encoder_height_tv" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView

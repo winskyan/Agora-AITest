@@ -44,4 +44,6 @@
     <string name="manual_input">Manual Input</string>
     <string name="select_app_id">Select App ID</string>
     <string name="go">GO</string>
+    <string name="video_encoder_width">Video Width</string>
+    <string name="video_encoder_height">Video Height</string>
 </resources>

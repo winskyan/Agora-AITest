@@ -190,6 +190,20 @@ object SettingsDialog {
                         }
                     }
 
+                    binding.videoEncoderWidthEt.setText(DemoContext.videoEncoderWidth.toString())
+                    binding.videoEncoderWidthEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.videoEncoderWidth = binding.videoEncoderWidthEt.text.toString().toIntOrNull() ?: 1920
+                        }
+                    }
+
+                    binding.videoEncoderHeightEt.setText(DemoContext.videoEncoderHeight.toString())
+                    binding.videoEncoderHeightEt.setOnFocusChangeListener { _, hasFocus ->
+                        if (!hasFocus) {
+                            DemoContext.videoEncoderHeight = binding.videoEncoderHeightEt.text.toString().toIntOrNull() ?: 720
+                        }
+                    }
+
                     val paramsLayout = binding.paramsLayout
                     createCheckboxes(paramsLayout, config, context)
 
