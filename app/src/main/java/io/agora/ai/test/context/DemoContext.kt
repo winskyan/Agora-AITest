@@ -137,6 +137,10 @@ object DemoContext {
         get() = MMKVUtils.getInt(Constants.MMKV_KEY_VIDEO_ENCODER_HEIGHT, 720)
         set(value) = MMKVUtils.putInt(Constants.MMKV_KEY_VIDEO_ENCODER_HEIGHT, value)
 
+    var channelName: String
+        get() = MMKVUtils.getString(Constants.MMKV_KEY_CHANNEL_NAME, Constants.DEFAULT_CHANNEL_NAME)
+        set(value) = MMKVUtils.putString(Constants.MMKV_KEY_CHANNEL_NAME, value)
+
     var appIdSelectionMode: Int
         get() = MMKVUtils.getInt(
             Constants.MMKV_KEY_APP_ID_SELECTION_MODE,

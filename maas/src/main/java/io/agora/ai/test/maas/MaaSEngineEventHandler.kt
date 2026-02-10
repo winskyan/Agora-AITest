@@ -1,6 +1,7 @@
 package io.agora.ai.test.maas
 
 import io.agora.ai.test.maas.model.AudioVolumeInfo
+import io.agora.ai.test.maas.model.RemoteVideoStatsInfo
 
 
 interface MaaSEngineEventHandler {
@@ -27,5 +28,7 @@ interface MaaSEngineEventHandler {
     )
 
     fun onMetadataReceived(channelId: String, uid: Int, metadata: ByteArray?, timeStampMs: Long)
+
+    fun onRemoteVideoStats(stats: RemoteVideoStatsInfo)
 
 }

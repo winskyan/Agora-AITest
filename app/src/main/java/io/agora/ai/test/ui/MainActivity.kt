@@ -23,6 +23,8 @@ import io.agora.ai.test.maas.model.AudioVolumeInfo
 import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
 import io.agora.ai.test.maas.model.MassEncryptionConfig
+import io.agora.ai.test.maas.model.RemoteUserInfo
+import io.agora.ai.test.maas.model.RemoteVideoStatsInfo
 import io.agora.ai.test.maas.model.SceneMode
 import io.agora.ai.test.maas.model.VadConfiguration
 import io.agora.ai.test.maas.model.WatermarkOptions
@@ -59,8 +61,22 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     private var mMaaSEngine: MaaSEngine? = null
 
-    private var mChannelName = "testAga"
+    private var mChannelName = Constants.DEFAULT_CHANNEL_NAME
     private var mJoinSuccess = false
+    private val mRemoteUsers = mutableListOf<RemoteUserInfo>() // 保存所有远端用户信息
+    private var mCurrentRemoteUid = 0 // 当前显示的远端用户 uid
+    private var mLocalUid = 0 // 本地用户 uid
+
+    // 获取当前用户的流类型，如果没有当前用户则返回默认的大流
+    private fun getCurrentStreamType(): MaaSConstants.VideoStreamType {
+        return mRemoteUsers.find { it.userId == mCurrentRemoteUid }?.streamType
+            ?: MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
+    }
+
+    // 判断当前用户是否是大流
+    private fun isCurrentHighStream(): Boolean {
+        return getCurrentStreamType() == MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
+    }
 
     private var mSendRtcAudioMetadataTime = 0L
     private var mSendRtcAudioMetadata = ""
@@ -269,6 +285,24 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         val versionStr = "Rtc SDK Version: ${MaaSEngine.getSdkVersion()}"
         binding.tvSdkVersion.text = versionStr
 
+        // 从保存的配置中加载频道名称
+        val savedChannelName = DemoContext.channelName
+        if (savedChannelName.isNotEmpty()) {
+            binding.etChannelName.setText(savedChannelName)
+            mChannelName = savedChannelName
+        }
+
+        // 监听频道名称输入变化，失去焦点时保存
+        binding.etChannelName.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val inputChannelName = binding.etChannelName.text.toString().trim()
+                if (inputChannelName.isNotEmpty()) {
+                    DemoContext.channelName = inputChannelName
+                    mChannelName = inputChannelName
+                }
+            }
+        }
+
         binding.toolbarSetting.setOnClickListener {
             SettingsDialog.showSettingsDialog(this)
         }
@@ -292,11 +326,19 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                     MaaSEngine.destroy()
                 }
                 closeWriter()
+                // 清空远端用户列表
+                mRemoteUsers.clear()
+                mCurrentRemoteUid = 0
             } else {
                 initData()
-                var channelName = binding.etChannelName.text.toString()
+                var channelName = binding.etChannelName.text.toString().trim()
                 if (channelName.isEmpty()) {
                     channelName = mChannelName
+                }
+                // 保存频道名称
+                if (channelName.isNotEmpty()) {
+                    DemoContext.channelName = channelName
+                    mChannelName = channelName
                 }
                 mHistoryFileName =
                     "history-${channelName}-${KeyCenter.getRtcUid()}-${Utils.getCurrentDateStr("yyyyMMdd_HHmmss")}.txt"
@@ -471,6 +513,14 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnSendYuv.setOnClickListener {
             sendYuv()
         }
+
+        binding.btnSwitchVideoStream.setOnClickListener {
+            switchVideoStream()
+        }
+
+        binding.btnSwitchRemoteUser.setOnClickListener {
+            switchRemoteUser()
+        }
     }
 
     private fun sendYuv() {
@@ -502,6 +552,92 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         if (null != mVideoFileReader) {
             mVideoFileReader?.stop()
             mVideoFileReader = null
+        }
+    }
+
+    private fun switchVideoStream() {
+        if (!mJoinSuccess) {
+            Log.w(TAG, "switchVideoStream: not joined channel")
+            return
+        }
+
+        if (mCurrentRemoteUid == 0) {
+            Log.w(TAG, "switchVideoStream: no current remote user")
+            updateHistoryUI("SwitchVideoStream: no current remote user")
+            return
+        }
+
+        // 获取当前流类型并切换
+        val currentStreamType = getCurrentStreamType()
+        val newStreamType = if (currentStreamType == MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH) {
+            MaaSConstants.VideoStreamType.VIDEO_STREAM_LOW
+        } else {
+            MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
+        }
+
+        // 只对当前 uid 设置大小流
+        val ret = mMaaSEngine?.setRemoteVideoStreamType(mCurrentRemoteUid, newStreamType) ?: -1
+        if (ret == 0) {
+            // 更新本地保存的流类型
+            mRemoteUsers.find { it.userId == mCurrentRemoteUid }?.streamType = newStreamType
+            val streamTypeStr = if (newStreamType == MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH) "HIGH" else "LOW"
+            updateHistoryUI("SwitchVideoStream: Set uid $mCurrentRemoteUid to $streamTypeStr stream")
+            // 更新 UI
+            runOnUiThread {
+                updateUI()
+            }
+        } else {
+            Log.e(TAG, "switchVideoStream failed: ret=$ret")
+            updateHistoryUI("SwitchVideoStream failed: ret=$ret")
+            // 更新 UI 以恢复按钮文本
+            runOnUiThread {
+                updateUI()
+            }
+        }
+    }
+
+    private fun switchRemoteUser() {
+        if (!mJoinSuccess) {
+            Log.w(TAG, "switchRemoteUser: not joined channel")
+            return
+        }
+
+        if (mRemoteUsers.isEmpty()) {
+            Log.w(TAG, "switchRemoteUser: no remote users")
+            updateHistoryUI("SwitchRemoteUser: no remote users")
+            return
+        }
+
+        // 找到当前 uid 在列表中的位置
+        val currentIndex = mRemoteUsers.indexOfFirst { it.userId == mCurrentRemoteUid }
+        val nextIndex = if (currentIndex >= 0 && currentIndex < mRemoteUsers.size - 1) {
+            currentIndex + 1
+        } else {
+            0 // 如果没找到或已经是最后一个，切换到第一个
+        }
+
+        val nextUser = mRemoteUsers[nextIndex]
+        mCurrentRemoteUid = nextUser.userId
+
+        // 设置远端视频视图
+        val ret = mMaaSEngine?.setupRemoteVideo(
+            binding.remoteView,
+            MaaSConstants.RenderMode.FIT,
+            mCurrentRemoteUid
+        ) ?: -1
+
+        if (ret == 0) {
+            // 恢复该用户保存的流类型
+            val savedStreamType = nextUser.streamType
+            // 应用保存的流类型
+            mMaaSEngine?.setRemoteVideoStreamType(mCurrentRemoteUid, savedStreamType)
+            updateHistoryUI("SwitchRemoteUser: switched to uid $mCurrentRemoteUid")
+            runOnUiThread {
+                updateUI()
+            }
+        } else {
+            Log.e(TAG, "switchRemoteUser failed: ret=$ret")
+            updateHistoryUI("SwitchRemoteUser failed: ret=$ret")
         }
     }
 
@@ -644,6 +780,8 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         binding.btnSendAudioMetadata.isEnabled = mJoinSuccess
         binding.btnSendRtmMessage.isEnabled = mJoinSuccess
         binding.btnSendYuv.isEnabled = mJoinSuccess
+        binding.btnSwitchVideoStream.isEnabled = mJoinSuccess && mCurrentRemoteUid != 0
+        binding.btnSwitchRemoteUser.isEnabled = mJoinSuccess && mRemoteUsers.size > 1
 
         binding.btnJoin.text =
             if (mJoinSuccess) getText(R.string.leave) else getText(R.string.join)
@@ -655,6 +793,31 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             if (DemoContext.enableAudio) getText(R.string.disable_audio) else getText(
                 R.string.enable_audio
             )
+
+        binding.btnSwitchVideoStream.text =
+            if (isCurrentHighStream()) getText(R.string.set_low_stream) else getText(R.string.set_high_stream)
+
+        // 更新本地 UID 显示
+        if (mJoinSuccess && mLocalUid != 0) {
+            binding.tvLocalUserInfo.text = "UID: $mLocalUid"
+            binding.tvLocalUserInfo.visibility = View.VISIBLE
+        } else {
+            binding.tvLocalUserInfo.visibility = View.GONE
+        }
+
+        // 更新远端视频统计信息显示
+        if (mJoinSuccess && mCurrentRemoteUid != 0) {
+            // 如果已经有统计信息文本，保持显示；否则隐藏
+            // 注意：统计信息的文本内容由 onRemoteVideoStats 回调更新
+            // 这里只控制显示/隐藏状态
+            if (binding.tvRemoteVideoStats.text.isNotEmpty()) {
+                binding.tvRemoteVideoStats.visibility = View.VISIBLE
+            } else {
+                binding.tvRemoteVideoStats.visibility = View.GONE
+            }
+        } else {
+            binding.tvRemoteVideoStats.visibility = View.GONE
+        }
     }
 
     private fun updateToolbarTitle(title: String) {
@@ -664,8 +827,9 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
         mJoinSuccess = true
+        mLocalUid = uid
         runOnUiThread {
-            updateToolbarTitle("${getString(R.string.app_name)}($channel:$uid:${if (DemoContext.enableRtm) KeyCenter.getRtmUid() else ""})")
+            updateToolbarTitle("${getString(R.string.app_name)}($channel${if (DemoContext.enableRtm) ":${KeyCenter.getRtmUid()}" else ""})")
             updateUI()
             handleJoinChannelSuccess()
         }
@@ -674,6 +838,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     override fun onLeaveChannelSuccess() {
         Log.d(TAG, "onLeaveChannelSuccess")
         mJoinSuccess = false
+        mLocalUid = 0
+        // 清空远端用户列表
+        mRemoteUsers.clear()
+        mCurrentRemoteUid = 0
         runOnUiThread {
             updateToolbarTitle(getString(R.string.app_name))
             updateUI()
@@ -682,15 +850,81 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
         runOnUiThread {
-            mMaaSEngine?.setupRemoteVideo(
-                binding.remoteView,
-                MaaSConstants.RenderMode.FIT,
-                uid
+            // 添加到远端用户列表
+            if (uid != 0 && mRemoteUsers.none { it.userId == uid }) {
+                mRemoteUsers.add(RemoteUserInfo(uid, MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH))
+            }
+
+            Log.d(
+                TAG,
+                "onUserJoined mRemoteUsers:${mRemoteUsers.map { "uid:${it.userId} streamType:${it.streamType}" }}"
             )
+
+            // 如果是第一个远端用户，设置为当前显示的用户
+            if (mCurrentRemoteUid == 0 && uid != 0) {
+                mCurrentRemoteUid = uid
+                mMaaSEngine?.setupRemoteVideo(
+                    binding.remoteView,
+                    MaaSConstants.RenderMode.FIT,
+                    uid
+                )
+            } else if (mCurrentRemoteUid == uid) {
+                // 如果当前用户重新加入，重新设置视频视图
+                mMaaSEngine?.setupRemoteVideo(
+                    binding.remoteView,
+                    MaaSConstants.RenderMode.FIT,
+                    uid
+                )
+            }
+            updateUI()
         }
     }
 
     override fun onUserOffline(uid: Int, reason: Int) {
+        runOnUiThread {
+            // 从远端用户列表中移除
+            mRemoteUsers.removeAll { it.userId == uid }
+
+            // 如果当前显示的用户离线了，切换到下一个用户
+            if (mCurrentRemoteUid == uid) {
+                if (mRemoteUsers.isNotEmpty()) {
+                    val nextUser = mRemoteUsers[0]
+                    mCurrentRemoteUid = nextUser.userId
+                    mMaaSEngine?.setupRemoteVideo(
+                        binding.remoteView,
+                        MaaSConstants.RenderMode.FIT,
+                        mCurrentRemoteUid
+                    )
+                    // 恢复该用户的流类型
+                    val savedStreamType = nextUser.streamType
+                    mMaaSEngine?.setRemoteVideoStreamType(mCurrentRemoteUid, savedStreamType)
+                } else {
+                    // 没有其他远端用户了，解绑当前用户的视频视图
+                    mMaaSEngine?.setupRemoteVideo(null, null, uid)
+                    mCurrentRemoteUid = 0
+                }
+            }
+            updateUI()
+        }
+    }
+
+    override fun onRemoteVideoStats(stats: RemoteVideoStatsInfo) {
+        runOnUiThread {
+            // 只显示当前用户的统计信息
+            if (stats.uid == mCurrentRemoteUid) {
+                val streamTypeStr =
+                    if (stats.streamType == MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH) "HIGH" else "LOW"
+                val statsText = "UID: ${stats.uid}\n" +
+                        "${stats.width}x${stats.height}\n" +
+                        "${stats.receivedBitrate} kbps\n" +
+                        "流类型: $streamTypeStr"
+                binding.tvRemoteVideoStats.text = statsText
+                if (binding.tvRemoteVideoStats.visibility != View.VISIBLE) {
+                    // 通过 updateUI 来控制显示/隐藏
+                    updateUI()
+                }
+            }
+        }
     }
 
     override fun onAudioVolumeIndication(

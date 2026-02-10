@@ -16,6 +16,9 @@
       ],
       "dump": [
         "{\"che.audio.frame_dump\":{\"location\":\"all\",\"action\":\"start\",\"max_size_bytes\":\"100000000\",\"uuid\":\"123456789\", \"duration\": \"150000\"}}"
+      ],
+      "stream": [
+        "{\"rtc.video.enable_minor_stream_intra_request\":true}"
       ]
     }
   ],
@@ -54,8 +57,8 @@
     },
     {
       "meeting": 8
-    }
-    ,{
+    },
+    {
       "ai_server": 9
     },
     {

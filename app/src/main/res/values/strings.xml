@@ -46,4 +46,8 @@
     <string name="go">GO</string>
     <string name="video_encoder_width">Video Width</string>
     <string name="video_encoder_height">Video Height</string>
+    <string name="switch_video_stream">Switch Stream</string>
+    <string name="set_low_stream">Set Low Stream</string>
+    <string name="set_high_stream">Set High Stream</string>
+    <string name="switch_remote_user">Switch Remote</string>
 </resources>

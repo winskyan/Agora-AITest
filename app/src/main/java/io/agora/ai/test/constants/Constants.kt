@@ -4,6 +4,8 @@ object Constants {
     const val TAG = "AgoraAITest"
     const val LOG_FILE_NAME = "agora.AITest"
 
+    const val DEFAULT_CHANNEL_NAME = "testAga"
+
     const val MMKV_KEY_PARAMS = "params"
     const val MMKV_KEY_AUDIO_PROFILE = "audioProfile"
     const val MMKV_KEY_AUDIO_SCENARIO = "audioScenario"
@@ -33,6 +35,7 @@ object Constants {
     const val MMKV_KEY_CODEC_TYPE = "codecType"
     const val MMKV_KEY_VIDEO_ENCODER_WIDTH = "videoEncoderWidth"
     const val MMKV_KEY_VIDEO_ENCODER_HEIGHT = "videoEncoderHeight"
+    const val MMKV_KEY_CHANNEL_NAME = "channelName"
 
     const val APP_ID_MODE_MANUAL = 0
     const val APP_ID_MODE_SELECT = 1

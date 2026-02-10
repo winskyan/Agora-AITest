@@ -1,7 +1,5 @@
 package io.agora.ai.test.maas
 
-import io.agora.rtm.RtmConstants.RtmChannelType
-
 class MaaSConstants {
     companion object {
         const val TAG = "AgoraAITest-MaaSEngine"
@@ -170,6 +168,22 @@ class MaaSConstants {
                 for (viewFrameType in ViewFrameType.entries) {
                     if (viewFrameType.value == type) {
                         return viewFrameType
+                    }
+                }
+                return null
+            }
+        }
+    }
+
+    enum class VideoStreamType(val value: Int) {
+        VIDEO_STREAM_HIGH(0),
+        VIDEO_STREAM_LOW(1);
+
+        companion object {
+            fun getVideoStreamType(type: Int): VideoStreamType? {
+                for (videoStreamType in VideoStreamType.entries) {
+                    if (videoStreamType.value == type) {
+                        return videoStreamType
                     }
                 }
                 return null

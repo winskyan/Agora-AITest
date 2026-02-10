@@ -9,6 +9,7 @@ import io.agora.ai.test.maas.internal.rtm.RtmManager
 import io.agora.ai.test.maas.internal.utils.Utils
 import io.agora.ai.test.maas.model.JoinChannelConfig
 import io.agora.ai.test.maas.model.MaaSEngineConfiguration
+import io.agora.ai.test.maas.model.RemoteVideoStatsInfo
 import io.agora.ai.test.maas.model.WatermarkOptions
 import io.agora.base.JavaI420Buffer
 import io.agora.base.VideoFrame
@@ -60,7 +61,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
     private var mJoinChannelConfig: JoinChannelConfig? = null
     private var mChannelId = ""
     private var mLocalUserId = 0
-    private var mRemoteUserId = 0
+    private val mRemoteUserIds = mutableSetOf<Int>()
 
     private var mCustomAudioTrackId = -1
 
@@ -105,13 +106,24 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
         override fun onUserJoined(uid: Int, elapsed: Int) {
             Log.d(MaaSConstants.TAG, "onUserJoined uid:$uid elapsed:$elapsed")
-            mRemoteUserId = uid
+            if (uid != 0) {
+                mRemoteUserIds.add(uid)
+            }
             mEventCallback?.onUserJoined(uid, elapsed)
         }
 
         override fun onUserOffline(uid: Int, reason: Int) {
             Log.d(MaaSConstants.TAG, "onUserOffline uid:$uid reason:$reason")
+            mRemoteUserIds.remove(uid)
             mEventCallback?.onUserOffline(uid, reason)
+        }
+
+        override fun onFirstRemoteVideoFrame(uid: Int, width: Int, height: Int, elapsed: Int) {
+            super.onFirstRemoteVideoFrame(uid, width, height, elapsed)
+            Log.d(
+                MaaSConstants.TAG,
+                "onFirstRemoteVideoFrame uid:$uid width:$width height:$height elapsed:$elapsed"
+            )
         }
 
         override fun onAudioVolumeIndication(
@@ -158,6 +170,31 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                 } string data:${String(data!!)}"
             )
             mEventCallback?.onAudioMetadataReceived(uid, data)
+        }
+
+        override fun onRemoteVideoStats(stats: RemoteVideoStats?) {
+            super.onRemoteVideoStats(stats)
+            Log.d(
+                MaaSConstants.TAG,
+                "onRemoteVideoStats uid:${stats?.uid} delay:${stats?.delay} width:${stats?.width} height:${stats?.height} receivedBitrate:${stats?.receivedBitrate} decoderOutputFrameRate:${stats?.decoderOutputFrameRate} rxStreamType:${stats?.rxStreamType}"
+            )
+
+            // 转换为我们的数据模型并回调
+            stats?.let {
+                val streamType = when (it.rxStreamType) {
+                    Constants.VideoStreamType.VIDEO_STREAM_HIGH.value -> MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
+                    Constants.VideoStreamType.VIDEO_STREAM_LOW.value -> MaaSConstants.VideoStreamType.VIDEO_STREAM_LOW
+                    else -> MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
+                }
+                val statsInfo = RemoteVideoStatsInfo(
+                    uid = it.uid,
+                    width = it.width,
+                    height = it.height,
+                    receivedBitrate = it.receivedBitrate,
+                    streamType = streamType
+                )
+                mEventCallback?.onRemoteVideoStats(statsInfo)
+            }
         }
     }
 
@@ -702,8 +739,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
 
             }
 
+            // 使用第一个远端用户的 uid，如果没有则使用 0
+            val remoteUid = mRemoteUserIds.firstOrNull() ?: 0
             val joinParams =
-                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": true}}"
+                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${remoteUid}, \"anonymous\": true}}"
             setAgoraRtcParameters(joinParams)
             Log.d(
                 MaaSConstants.TAG, "joinChannel ret:$ret"
@@ -870,8 +909,10 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         }
         PullAudioFrameManager.stop()
         try {
+            // 使用第一个远端用户的 uid，如果没有则使用 0
+            val remoteUid = mRemoteUserIds.firstOrNull() ?: 0
             val leaveParams =
-                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${mRemoteUserId}, \"anonymous\": false}}"
+                "{\"che.audio.playout_uid_anonymous\":{\"channelId\":\"${mChannelId}\", \"localUid\":${mLocalUserId}, \"remoteUid\": ${remoteUid}, \"anonymous\": false}}"
             setAgoraRtcParameters(leaveParams)
             Log.d(MaaSConstants.TAG, "setParameters $leaveParams")
             Thread.sleep(300)
@@ -1053,6 +1094,34 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
             Log.d(
                 MaaSConstants.TAG, "setupRemoteVideo ret:$ret"
             )
+        }
+
+        return MaaSConstants.OK
+    }
+
+    override fun setRemoteVideoStreamType(uid: Int, streamType: MaaSConstants.VideoStreamType): Int {
+        Log.d(
+            MaaSConstants.TAG,
+            "setRemoteVideoStreamType uid:$uid streamType:$streamType"
+        )
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "setRemoteVideoStreamType error: not initialized")
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+
+        // 将 MaaSConstants.VideoStreamType 转换为 io.agora.rtc2.Constants.VideoStreamType
+        val rtcStreamType = when (streamType) {
+            MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH -> Constants.VideoStreamType.VIDEO_STREAM_HIGH
+            MaaSConstants.VideoStreamType.VIDEO_STREAM_LOW -> Constants.VideoStreamType.VIDEO_STREAM_LOW
+        }
+
+        // 只对指定的 uid 设置大小流
+        val result = mRtcEngine?.setRemoteVideoStreamType(uid, rtcStreamType) ?: -1
+        if (result != 0) {
+            Log.e(MaaSConstants.TAG, "setRemoteVideoStreamType failed for uid:$uid ret:$result")
+            return result
+        } else {
+            Log.d(MaaSConstants.TAG, "setRemoteVideoStreamType success for uid:$uid rtcStreamType:$rtcStreamType")
         }
 
         return MaaSConstants.OK
@@ -1396,7 +1465,7 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
         mDataStreamId = -1
         mAudioFileName = ""
         mLocalUserId = 0
-        mRemoteUserId = 0
+        mRemoteUserIds.clear()
         mChannelId = ""
         mJoinChannelConfig = null
 
