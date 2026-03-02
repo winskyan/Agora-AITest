@@ -5,11 +5,13 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
 import com.lxj.xpopup.XPopup
 import io.agora.ai.test.BuildConfig
 import io.agora.ai.test.R
@@ -113,6 +115,10 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
     private var mAudioFileReader: AudioFileReader? = null
 
     private var mJoinChannelConfig: JoinChannelConfig = JoinChannelConfig()
+
+    // 切换大小流耗时：点击到收到对应流首帧的时间
+    private var mStreamSwitchStartTime = 0L
+    private var mStreamSwitchExpectType: MaaSConstants.VideoStreamType? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -575,21 +581,38 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
             MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH
         }
 
-        // 只对当前 uid 设置大小流
-        val ret = mMaaSEngine?.setRemoteVideoStreamType(mCurrentRemoteUid, newStreamType) ?: -1
+        val uid = mCurrentRemoteUid
+        // 记录点击时刻，用于计算到收到对应流首帧的耗时
+        mStreamSwitchStartTime = SystemClock.elapsedRealtime()
+        mStreamSwitchExpectType = newStreamType
+        // 按推荐顺序调用：先取消静音 -> 设置流类型 -> 解绑 View -> 重新绑定 View
+        mMaaSEngine?.muteRemoteVideoStream(uid, false)
+        var ret = mMaaSEngine?.setRemoteVideoStreamType(uid, newStreamType) ?: -1
+        if (ret != 0) {
+            Log.e(TAG, "switchVideoStream setRemoteVideoStreamType failed: ret=$ret")
+            runOnUiThread { updateUI() }
+            return
+        }
+        // 解绑当前 View（REMOVE）
+        mMaaSEngine?.setupRemoteVideo(null, null, uid)
+        // 重新绑定到小窗 View（ADD）
+        ret = mMaaSEngine?.setupRemoteVideo(
+            binding.remoteView,
+            MaaSConstants.RenderMode.FIT,
+            uid
+        ) ?: -1
+
         if (ret == 0) {
             // 更新本地保存的流类型
-            mRemoteUsers.find { it.userId == mCurrentRemoteUid }?.streamType = newStreamType
+            mRemoteUsers.find { it.userId == uid }?.streamType = newStreamType
             val streamTypeStr = if (newStreamType == MaaSConstants.VideoStreamType.VIDEO_STREAM_HIGH) "HIGH" else "LOW"
-            updateHistoryUI("SwitchVideoStream: Set uid $mCurrentRemoteUid to $streamTypeStr stream")
-            // 更新 UI
+            updateHistoryUI("SwitchVideoStream: Set uid $uid to $streamTypeStr stream")
             runOnUiThread {
                 updateUI()
             }
         } else {
-            Log.e(TAG, "switchVideoStream failed: ret=$ret")
+            Log.e(TAG, "switchVideoStream setupRemoteVideo failed: ret=$ret")
             updateHistoryUI("SwitchVideoStream failed: ret=$ret")
-            // 更新 UI 以恢复按钮文本
             runOnUiThread {
                 updateUI()
             }
@@ -770,7 +793,121 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         exitProcess(0)
     }
 
+    /**
+     * 根据当前远端流类型（大流/小流）更新远端视频 View 的位置和尺寸：
+     * 大流：本地与远端左右并排，各占 50%。
+     * 小流：本地视图占满整行，远端视图叠在本地视图右下角（部分重叠、嵌套）。
+     */
+    private fun updateRemoteViewSize() {
+        val density = resources.displayMetrics.density
+        val streamType = getCurrentStreamType()
+        val localParams = binding.localView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val remoteParams = binding.remoteView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val parentId = ConstraintLayout.LayoutParams.PARENT_ID
+        val unset = ConstraintLayout.LayoutParams.UNSET
+        val matchConstraint = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT
+
+        if (streamType == MaaSConstants.VideoStreamType.VIDEO_STREAM_LOW) {
+            // 小流：本地视图占满整行
+            localParams.startToStart = parentId
+            localParams.endToEnd = parentId
+            localParams.topToBottom = binding.btnJoin.id
+            localParams.bottomToBottom = unset
+            localParams.width = matchConstraint
+            localParams.matchConstraintPercentWidth = 1.0f
+            localParams.height = (150 * density).toInt()
+            localParams.marginEnd = (10 * density).toInt()
+            localParams.horizontalBias = 0.5f
+            binding.localView.layoutParams = localParams
+
+            // 小流：远端视图叠在本地视图右下角，固定小尺寸，带内边距
+            val smallW = (100 * density).toInt()
+            val smallH = (75 * density).toInt()
+            val inset = (8 * density).toInt()
+            remoteParams.startToStart = unset
+            remoteParams.startToEnd = unset
+            remoteParams.endToEnd = binding.localView.id
+            remoteParams.topToTop = unset
+            remoteParams.topToBottom = unset
+            remoteParams.bottomToBottom = binding.localView.id
+            remoteParams.width = smallW
+            remoteParams.height = smallH
+            remoteParams.marginEnd = inset
+            remoteParams.bottomMargin = inset
+            binding.remoteView.layoutParams = remoteParams
+            binding.remoteView.elevation = 4f * density
+            // 小窗上统计文字置于视频之上，确保显示在小窗口上
+            binding.tvRemoteVideoStats.elevation = 10f * density
+        } else {
+            // 大流：本地与远端左右并排
+            localParams.startToStart = parentId
+            localParams.endToStart = binding.remoteView.id
+            localParams.topToBottom = binding.btnJoin.id
+            localParams.width = matchConstraint
+            localParams.matchConstraintPercentWidth = 0.5f
+            localParams.height = (150 * density).toInt()
+            localParams.marginEnd = (10 * density).toInt()
+            binding.localView.layoutParams = localParams
+
+            remoteParams.startToEnd = binding.localView.id
+            remoteParams.endToEnd = parentId
+            remoteParams.topToTop = unset
+            remoteParams.topToBottom = binding.btnJoin.id
+            remoteParams.bottomToBottom = unset
+            remoteParams.width = matchConstraint
+            remoteParams.matchConstraintPercentWidth = 0.5f
+            remoteParams.height = (150 * density).toInt()
+            remoteParams.marginStart = 0
+            remoteParams.marginEnd = 0
+            remoteParams.goneStartMargin = (10 * density).toInt()
+            binding.remoteView.elevation = 0f
+            binding.remoteView.layoutParams = remoteParams
+            binding.tvRemoteVideoStats.elevation = 0f
+        }
+        binding.localView.requestLayout()
+        binding.remoteView.requestLayout()
+    }
+
+    /**
+     * 将本地/远端视图布局重置为大流（左右并排），用于 leave 后及再次 join 时默认大流。
+     */
+    private fun resetVideoViewsToHighStream() {
+        val density = resources.displayMetrics.density
+        val localParams = binding.localView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val remoteParams = binding.remoteView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val parentId = ConstraintLayout.LayoutParams.PARENT_ID
+        val unset = ConstraintLayout.LayoutParams.UNSET
+        val matchConstraint = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT
+        localParams.startToStart = parentId
+        localParams.endToStart = binding.remoteView.id
+        localParams.topToBottom = binding.btnJoin.id
+        localParams.width = matchConstraint
+        localParams.matchConstraintPercentWidth = 0.5f
+        localParams.height = (150 * density).toInt()
+        localParams.marginEnd = (10 * density).toInt()
+        binding.localView.layoutParams = localParams
+        remoteParams.startToEnd = binding.localView.id
+        remoteParams.endToEnd = parentId
+        remoteParams.topToTop = unset
+        remoteParams.topToBottom = binding.btnJoin.id
+        remoteParams.bottomToBottom = unset
+        remoteParams.width = matchConstraint
+        remoteParams.matchConstraintPercentWidth = 0.5f
+        remoteParams.height = (150 * density).toInt()
+        remoteParams.marginStart = 0
+        remoteParams.marginEnd = 0
+        remoteParams.goneStartMargin = (10 * density).toInt()
+        binding.remoteView.elevation = 0f
+        binding.remoteView.layoutParams = remoteParams
+        binding.tvRemoteVideoStats.elevation = 0f
+        binding.localView.requestLayout()
+        binding.remoteView.requestLayout()
+    }
+
     private fun updateUI() {
+        if (mJoinSuccess && mCurrentRemoteUid != 0) {
+            updateRemoteViewSize()
+        }
         binding.btnEnableAudio.isEnabled = mJoinSuccess
         binding.btnEnableVideo.isEnabled = mJoinSuccess
         binding.btnSwitchCamera.isEnabled = mJoinSuccess
@@ -830,6 +967,7 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         mLocalUid = uid
         runOnUiThread {
             updateToolbarTitle("${getString(R.string.app_name)}($channel${if (DemoContext.enableRtm) ":${KeyCenter.getRtmUid()}" else ""})")
+            resetVideoViewsToHighStream()
             updateUI()
             handleJoinChannelSuccess()
         }
@@ -839,11 +977,13 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
         Log.d(TAG, "onLeaveChannelSuccess")
         mJoinSuccess = false
         mLocalUid = 0
-        // 清空远端用户列表
+        // 清空远端用户列表，重置为大流相关状态
         mRemoteUsers.clear()
         mCurrentRemoteUid = 0
+        mStreamSwitchExpectType = null
         runOnUiThread {
             updateToolbarTitle(getString(R.string.app_name))
+            resetVideoViewsToHighStream()
             updateUI()
         }
     }
@@ -920,8 +1060,16 @@ class MainActivity : AppCompatActivity(), MaaSEngineEventHandler {
                         "流类型: $streamTypeStr"
                 binding.tvRemoteVideoStats.text = statsText
                 if (binding.tvRemoteVideoStats.visibility != View.VISIBLE) {
-                    // 通过 updateUI 来控制显示/隐藏
-                    updateUI()
+                    binding.tvRemoteVideoStats.visibility = View.VISIBLE
+                }
+                updateUI()
+                // 耗时：从点击 set high/low stream 到收到对应流首帧
+                mStreamSwitchExpectType?.let { expectType ->
+                    if (stats.streamType == expectType) {
+                        val diff = SystemClock.elapsedRealtime() - mStreamSwitchStartTime
+                        updateHistoryUI("SwitchVideoStream delay: ${diff}ms (click -> first $streamTypeStr frame)")
+                        mStreamSwitchExpectType = null
+                    }
                 }
             }
         }

@@ -1092,10 +1092,31 @@ class MaaSEngineInternal : MaaSEngine(), AutoCloseable {
                     ?: io.agora.rtc2.video.VideoCanvas(view)
             val ret = mRtcEngine?.setupRemoteVideo(remote)
             Log.d(
-                MaaSConstants.TAG, "setupRemoteVideo ret:$ret"
+                MaaSConstants.TAG, "setupRemoteVideo ret:$ret (ADD)"
+            )
+        } else {
+            // 解绑：传入 null view 移除该 uid 与 View 的绑定
+            val remote = io.agora.rtc2.video.VideoCanvas(null, 0, remoteUid)
+            val ret = mRtcEngine?.setupRemoteVideo(remote)
+            Log.d(
+                MaaSConstants.TAG, "setupRemoteVideo ret:$ret (REMOVE) uid:$remoteUid"
             )
         }
 
+        return MaaSConstants.OK
+    }
+
+    override fun muteRemoteVideoStream(uid: Int, muted: Boolean): Int {
+        Log.d(MaaSConstants.TAG, "muteRemoteVideoStream uid:$uid muted:$muted")
+        if (mRtcEngine == null) {
+            Log.e(MaaSConstants.TAG, "muteRemoteVideoStream error: not initialized")
+            return MaaSConstants.ERROR_NOT_INITIALIZED
+        }
+        val result = mRtcEngine?.muteRemoteVideoStream(uid, muted) ?: -1
+        if (result != 0) {
+            Log.e(MaaSConstants.TAG, "muteRemoteVideoStream failed uid:$uid ret:$result")
+            return result
+        }
         return MaaSConstants.OK
     }
 

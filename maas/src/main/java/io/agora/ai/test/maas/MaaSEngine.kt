@@ -89,6 +89,8 @@ abstract class MaaSEngine {
 
     abstract fun setRemoteVideoStreamType(uid: Int, streamType: MaaSConstants.VideoStreamType): Int
 
+    abstract fun muteRemoteVideoStream(uid: Int, muted: Boolean): Int
+
     protected abstract fun doDestroy()
 
     companion object {
